@@ -1,17 +1,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <signal.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <sys/types.h>
+//#include <signal.h>
+//#include <string.h>
+//#include <sys/socket.h>
+//#include <sys/types.h>
 #include <sys/un.h>
-#include <netinet/in.h>
+//#include <netinet/in.h>
 #include <fcntl.h>
 #include <pthread.h>
-#define __USE_GNU
+//#define __USE_GNU
 #include <netdb.h>
-#include <errno.h>
+//#include <errno.h>
 #include <sys/wait.h>
 #include <stdarg.h>
 
