@@ -1,1 +1,1 @@
-cc music.c -o madasul && { rm /home/mark/musicsocket; cat list | ./madasul; }
+cc music.c -o madasul && { rm ~/.madasul_sock; cat list | ./madasul; }

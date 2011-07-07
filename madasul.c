@@ -19,7 +19,7 @@
 
 #define BUF_SIZE           1024
 #define TRACKS_BUF_SIZE	   128
-#define SOCKET_ADDRESS     "/home/mark/musicsocket"
+#define SOCKET_ADDRESS     "/home/mark/.madasul_sock"
 #define READ               0
 #define WRITE              1
 #define ERR                2
@@ -321,6 +321,47 @@ int main(/*int argc, char *argv[]*/) {
 		pthread_create(&p_player, &attr, player, NULL);
 		pthread_join(p_player, NULL);
 	}
+
+    return 0;
+}
+
+
+
+
+
+
+
+
+
+/*
+		if(cmd==STOP) {
+			printf("*puff*\n");
+			close(ctrl_sock);
+			if(pid>0) {
+				close(infp);
+				close(outfp);
+				kill(pid, SIGKILL);
+				x=wait(&stat);
+			}
+			return 0;
+		} else if(cmd==NEXT) {
+			close(infp);
+			close(outfp);
+			kill(pid, SIGKILL);
+			x=wait(&stat);
+			pid = -1;
+		} else if(cmd==PREV) {
+			tracknum-=2;
+			if(tracknum<0) tracknum = num - 1;
+			close(infp);
+			close(outfp);
+			kill(pid, SIGKILL);
+			x=wait(&stat);
+			pid = -1;
+		}
+*/
+
+
 	//pthread_join (p2, NULL);
 
     /*FILE* fp;
@@ -365,34 +406,3 @@ int main(/*int argc, char *argv[]*/) {
 
 		sleep(1);
 	}*/
-
-    return 0;
-}
-
-/*
-		if(cmd==STOP) {
-			printf("*puff*\n");
-			close(ctrl_sock);
-			if(pid>0) {
-				close(infp);
-				close(outfp);
-				kill(pid, SIGKILL);
-				x=wait(&stat);
-			}
-			return 0;
-		} else if(cmd==NEXT) {
-			close(infp);
-			close(outfp);
-			kill(pid, SIGKILL);
-			x=wait(&stat);
-			pid = -1;
-		} else if(cmd==PREV) {
-			tracknum-=2;
-			if(tracknum<0) tracknum = num - 1;
-			close(infp);
-			close(outfp);
-			kill(pid, SIGKILL);
-			x=wait(&stat);
-			pid = -1;
-		}
-*/
