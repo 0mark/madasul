@@ -1,0 +1,3 @@
+#!/bin/bash
+
+echo "$@" | socat - unix-connect:/home/mark/.madasul_sock
