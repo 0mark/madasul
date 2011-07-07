@@ -13,6 +13,7 @@
 #include <netdb.h>
 #include <errno.h>
 #include <sys/wait.h>
+#include <stdarg.h>
 
 #define LENGTH(X)          (sizeof X / sizeof X[0])
 
@@ -25,7 +26,7 @@
 
 enum { MPG, OGG, WAV, FLACC, TypeLast };
 enum { STOP, PAUSE, PLAY, NEXT, PREV, DIE, STATUS, CommandLast };
-enum { INC, DEC, SET }
+enum { INC, DEC, SET };
 
 typedef struct track {
     int type;
@@ -36,11 +37,17 @@ track** tracks;
 char* typenames[] = { "mp3", "mp2", "ogg", /*"wav", "wave", "flacc", */};
 int types[]       = {  MPG,   MPG,   OGG,  /* WAV,   WAV,    FLACC, */};
 char* ctrl_cmds[] = { "stop", "pause", "play", "next", "prev", "die", "status", };
-int ctrl_sock     = -1, tracknum = 0;
 char* play_cmds[][3]    = {
 	{ "/usr/bin/mpg123", "mpg123", "" },
 	{ "/usr/bin/ogg123", "ogg123", "" },
 };
+
+int ctrl_sock     = -1;
+int cur_track, num_tracks;
+//int stop = 0;
+int running = 0;
+pthread_mutex_t lock;
+pid_t player_pid;
 
 pid_t play(track* track, int* infp, int* outfp) {
     int p_stdin[2], p_stdout[2], type = track->type;
@@ -125,7 +132,7 @@ int opensock() {
     if((ctrl_sock = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
         ctrl_sock = -1;
         printf("Error opening socket.\n");
-		return;
+	return(0);
     }
 
 	flags = fcntl(ctrl_sock, F_GETFL, 0);
@@ -138,17 +145,11 @@ int opensock() {
 
     if(bind(ctrl_sock, (struct sockaddr *)&saun, len)<0) {
         printf("Error connecting socket.\n");
-        return;
+        return(0);
     }
 	listen(ctrl_sock, 5);
-
+    return(1);
 }
-
-int next_track, cur_track, num_tracks;
-int stop = 0;
-int running = 0;
-pthread_mutex_t lock;
-pid_t player_pid;
 
 void die(const char *errstr, ...) {
 	va_list ap;
@@ -166,10 +167,10 @@ int get_cmd(int *cmd_sock, char *val) {
 	int i, n, len, cmd = -1;
 
 	clilen = sizeof(cli_addr);
-	cmd_sock = accept(ctrl_sock, (struct sockaddr *)&cli_addr, &clilen);
+	*cmd_sock = accept(ctrl_sock, (struct sockaddr *)&cli_addr, &clilen);
 	if(cmd_sock < 0)
 		die("cant open listen socket\n");
-	n = read(cmd_sock, buf, BUF_SIZE);
+	n = read(*cmd_sock, buf, BUF_SIZE);
 
 	if(n>0) {
 		buf[n] = 0;
@@ -187,25 +188,25 @@ int get_cmd(int *cmd_sock, char *val) {
 }
 
 // you know, like track selection...
-void scout(unsigned int whatdow, unsigned int val) {
+void scout(unsigned int whatdo, unsigned int val) {
 	pthread_mutex_lock(&lock);
 	switch(whatdo) {
 		case INC:
-			next_track += val;
+			cur_track += val;
 			break;
 		case DEC:
-			next_track -= val;
+			cur_track -= val;
 			break;
 		case SET:
-			next_track = val;
+			cur_track = val;
 			break;
 	}
-	if(next_track<=0) next_track = num_tracks-1;
-	if(next_track>=num_tracks) next_track = 0;
+	if(cur_track<=0) cur_track = num_tracks-1;
+	if(cur_track>=num_tracks) cur_track = 0;
 	pthread_mutex_unlock(&lock);
 }
 
-void player() {
+void* player() {
 	FILE* fp;
     int num, infp, w, outfp, cmd, stat;
     char line[BUF_SIZE];
@@ -214,7 +215,7 @@ void player() {
 		die("pid is already in use\n");
 
 	pthread_mutex_lock(&lock);
-	if((player_pid = play(tracks[tracknum], &infp, &outfp))<=0) {
+	if((player_pid = play(tracks[cur_track], &infp, &outfp))<=0) {
 		die("cant exec player\n");
 	}
 	pthread_mutex_unlock(&lock);
@@ -229,24 +230,24 @@ void player() {
 	close(outfp);
 }
 
-void sock_printf(int *cmd_sock, const char *format, ...) {
+void sock_printf(int cmd_sock, const char *format, ...) {
 	char msg[BUF_SIZE];
 	va_list ap;
 
-	va_start(ap, errstr);
+	va_start(ap, format);
 	snprintf(msg, BUF_SIZE, format, ap);
 	va_end(ap);
 }
 
-void listener() {
+void* listener() {
 	char val[BUF_SIZE];
 	int cmd, cmd_sock, i;
 
 	while(1) {
-		if((cmd=get_cmd(&cmd_sock, &val))>=0) {
+		if((cmd=get_cmd(&cmd_sock, val))>=0) {
 			switch(cmd) {
 				case STOP:
-					kill(player_pid);
+					kill(player_pid, SIGKILL);
 					sock_printf(cmd_sock, "OK\n");
 					break;
 				case PAUSE:
@@ -256,8 +257,8 @@ void listener() {
 					if(strlen(val)) i = atoi(val);
 					else i = 1;
 					if(i>=0) {
-						kill(player_pid);
-						scout(SET, i)
+						kill(player_pid, SIGKILL);
+						scout(SET, i);
 						sock_printf(cmd_sock, "OK\n");
 					} else
 						sock_printf(cmd_sock, "bad value\n");
@@ -266,8 +267,8 @@ void listener() {
 					if(strlen(val)) i = atoi(val);
 					else i = 1;
 					if(i>0) {
-						kill(player_pid);
-						scout(INC, i)
+						kill(player_pid, SIGKILL);
+						scout(INC, i);
 						sock_printf(cmd_sock, "OK\n");
 					} else
 						sock_printf(cmd_sock, "bad value\n");
@@ -276,14 +277,14 @@ void listener() {
 					if(strlen(val)) i = atoi(val);
 					else i = 1;
 					if(i>0) {
-						kill(player_pid);
-						scout(DEC, i)
+						kill(player_pid, SIGKILL);
+						scout(DEC, i);
 						sock_printf(cmd_sock, "OK\n");
 					} else
 						sock_printf(cmd_sock, "bad value\n");
-					break
+					break;
 				case DIE:
-					kill(player_pid);
+					kill(player_pid, SIGKILL);
 					running = 0;
 					sock_printf(cmd_sock, "OK\n");
 					break;
@@ -305,18 +306,20 @@ int main(/*int argc, char *argv[]*/) {
 	pthread_t p_player, p_listener;
 	pthread_attr_t attr;
 
-    num_track = munchIn();
-    printf("munched %d lines\n", num);
-	opensock();
+	num_tracks = munchIn();
+	printf("munched %d lines\n", num_tracks);
+	if(!opensock())
+	    die("bare feet in nakatomi tower!\n");
+	printf("opened socket\n");
 
 	pthread_mutex_init(&lock, NULL);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
-	pthread_create(&listener, &attr, p_listener, NULL);
+	pthread_create(&p_listener, &attr, listener, NULL);
 	running = 1;
 	while(running==1) {
-		pthread_create(&player, &attr, p_player, NULL);
-		pthread_join(player, NULL);
+		pthread_create(&p_player, &attr, player, NULL);
+		pthread_join(p_player, NULL);
 	}
 	//pthread_join (p2, NULL);
 
@@ -392,4 +395,4 @@ int main(/*int argc, char *argv[]*/) {
 			x=wait(&stat);
 			pid = -1;
 		}
-*
+*/
