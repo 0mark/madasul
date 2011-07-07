@@ -8,7 +8,6 @@
 #include <sys/un.h>
 #include <netinet/in.h>
 #include <fcntl.h>
-#include <pthread.h>
 #define __USE_GNU
 #include <netdb.h>
 #include <errno.h>
@@ -129,7 +128,7 @@ int opensock() {
     }
 
 	flags = fcntl(ctrl_sock, F_GETFL, 0);
-	//fcntl(ctrl_sock, F_SETFL, flags | O_NONBLOCK);
+	fcntl(ctrl_sock, F_SETFL, flags | O_NONBLOCK);
 
     saun.sun_family = AF_UNIX;
     strcpy(saun.sun_path, SOCKET_ADDRESS);
@@ -144,51 +143,50 @@ int opensock() {
 
 }
 
-int next_track, cur_track, num_tracks;
-int stop = 0;
-int running = 0;
-pthread_mutex_t lock;
-pid_t player_pid;
-
-void die(const char *errstr, ...) {
-	va_list ap;
-
-	va_start(ap, errstr);
-	vfprintf(stderr, errstr, ap);
-	va_end(ap);
-	exit(1);
-}
-
-int get_cmd(int *cmd_sock, char *val) {
+int get_cmd() {
+	FILE *ctrl_fp;
 	struct sockaddr_un cli_addr;
 	socklen_t clilen;
 	char buf[BUF_SIZE];
-	int i, n, len, cmd = -1;
+	int i, cmd_sock, cmd = -1, n, stat;
 
 	clilen = sizeof(cli_addr);
 	cmd_sock = accept(ctrl_sock, (struct sockaddr *)&cli_addr, &clilen);
 	if(cmd_sock < 0)
-		die("cant open listen socket\n");
+		return -1;
+
 	n = read(cmd_sock, buf, BUF_SIZE);
 
 	if(n>0) {
 		buf[n] = 0;
-		for(i=0; i<LENGTH(ctrl_cmds); i++) {
-			len = strlen(ctrl_cmds[i]);
-			if(strncmp(ctrl_cmds[i], buf, len)==0) {
+		for(i=0; i<LENGTH(ctrl_cmds); i++)
+			if(strncmp(ctrl_cmds[i], buf, strlen(ctrl_cmds[i]))==0) {
 				cmd = i;
 				break;
 			}
-		}
-		strncpy(val, ctrl_cmds[i], len);
 	}
+
+	if(cmd<0) {
+		char msg[] = "INVALID\n";
+		send(cmd_sock, msg, strlen(msg), MSG_NOSIGNAL);
+	} else if(cmd==STATUS) {
+		char msg[BUF_SIZE];
+		int n = tracknum-1<0 ? 0: tracknum-1;
+		snprintf(msg, BUF_SIZE, "Track (%d): %s\n", n, tracks[n]->path);
+		send(cmd_sock, msg, strlen(msg), MSG_NOSIGNAL);
+	} else {
+		char msg[] = "OK\n";
+		send(cmd_sock, msg, strlen(msg), MSG_NOSIGNAL);
+	}
+	close(cmd_sock);
 
 	return cmd;
 }
 
+int next_track, cur_track, num_tracks;
+
 // you know, like track selection...
 void scout(unsigned int whatdow, unsigned int val) {
-	pthread_mutex_lock(&lock);
 	switch(whatdo) {
 		case INC:
 			next_track += val;
@@ -202,125 +200,10 @@ void scout(unsigned int whatdow, unsigned int val) {
 	}
 	if(next_track<=0) next_track = num_tracks-1;
 	if(next_track>=num_tracks) next_track = 0;
-	pthread_mutex_unlock(&lock);
-}
-
-void player() {
-	FILE* fp;
-    int num, infp, w, outfp, cmd, stat;
-    char line[BUF_SIZE];
-
-	if(player_pid>=0)
-		die("pid is already in use\n");
-
-	pthread_mutex_lock(&lock);
-	if((player_pid = play(tracks[tracknum], &infp, &outfp))<=0) {
-		die("cant exec player\n");
-	}
-	pthread_mutex_unlock(&lock);
-
-	w = waitpid(player_pid, &stat, 0);
-	if(WIFEXITED(stat)!=0) // WEXITSTATUS(stat_val)
-		scout(INC, 1);
-
-	player_pid = -1;
-
-	close(infp);
-	close(outfp);
-}
-
-void sock_printf(int *cmd_sock, const char *format, ...) {
-	char msg[BUF_SIZE];
-	va_list ap;
-
-	va_start(ap, errstr);
-	snprintf(msg, BUF_SIZE, format, ap);
-	va_end(ap);
-}
-
-void listener() {
-	char val[BUF_SIZE];
-	int cmd, cmd_sock, i;
-
-	while(1) {
-		if((cmd=get_cmd(&cmd_sock, &val))>=0) {
-			switch(cmd) {
-				case STOP:
-					kill(player_pid);
-					sock_printf(cmd_sock, "OK\n");
-					break;
-				case PAUSE:
-					sock_printf(cmd_sock, "not implemented\n");
-					break;
-				case PLAY:
-					if(strlen(val)) i = atoi(val);
-					else i = 1;
-					if(i>=0) {
-						kill(player_pid);
-						scout(SET, i)
-						sock_printf(cmd_sock, "OK\n");
-					} else
-						sock_printf(cmd_sock, "bad value\n");
-					break;
-				case NEXT:
-					if(strlen(val)) i = atoi(val);
-					else i = 1;
-					if(i>0) {
-						kill(player_pid);
-						scout(INC, i)
-						sock_printf(cmd_sock, "OK\n");
-					} else
-						sock_printf(cmd_sock, "bad value\n");
-					break;
-				case PREV:
-					if(strlen(val)) i = atoi(val);
-					else i = 1;
-					if(i>0) {
-						kill(player_pid);
-						scout(DEC, i)
-						sock_printf(cmd_sock, "OK\n");
-					} else
-						sock_printf(cmd_sock, "bad value\n");
-					break
-				case DIE:
-					kill(player_pid);
-					running = 0;
-					sock_printf(cmd_sock, "OK\n");
-					break;
-				case STATUS:
-					sock_printf(cmd_sock, "Track (%d): %s\n", cur_track, tracks[cur_track]->path);
-					break;
-				default:
-					sock_printf(cmd_sock, "unknown command");
-					break;
-			}
-		} else {
-			sock_printf(cmd_sock, "invalid command");
-		}
-		close(cmd_sock);
-	}
 }
 
 int main(/*int argc, char *argv[]*/) {
-	pthread_t p_player, p_listener;
-	pthread_attr_t attr;
-
-    num_track = munchIn();
-    printf("munched %d lines\n", num);
-	opensock();
-
-	pthread_mutex_init(&lock, NULL);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-
-	pthread_create(&listener, &attr, p_listener, NULL);
-	running = 1;
-	while(running==1) {
-		pthread_create(&player, &attr, p_player, NULL);
-		pthread_join(player, NULL);
-	}
-	//pthread_join (p2, NULL);
-
-    /*FILE* fp;
+    FILE* fp;
     int num, infp, x, outfp, cmd, stat;
     char line[BUF_SIZE];
     pid_t pid;
@@ -361,7 +244,7 @@ int main(/*int argc, char *argv[]*/) {
 
 
 		sleep(1);
-	}*/
+	}
 
     return 0;
 }
@@ -392,4 +275,4 @@ int main(/*int argc, char *argv[]*/) {
 			x=wait(&stat);
 			pid = -1;
 		}
-*
+*/

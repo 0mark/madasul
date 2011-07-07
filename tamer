@@ -1,0 +1,1 @@
+echo "$@" | socat - unix-connect:/home/mark/musicsocket

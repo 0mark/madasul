@@ -1,0 +1,17 @@
+#!/bin/bash
+
+function readdir {
+    for f in "$@"; do
+	if [ -d "$f" ]; then
+	    readdir ${f}"/"*
+	elif [ -a "$f" ]; then
+	    TYPE=$(echo "$f" | awk -F '.' '{print $NF}')
+	    ISMUSIC=$(echo $TYPE | egrep 'mp[23]|ogg' -c -i)
+	    if [ $ISMUSIC -gt 0 ]; then
+		echo $TYPE"	"$f
+	    fi
+        fi
+    done
+}
+
+readdir $1
