@@ -8,14 +8,7 @@ function readdir {
 	    TYPE=$(echo "$f" | awk -F '.' '{print $NF}')
 	    ISMUSIC=$(echo $TYPE | egrep 'mp[23]|ogg' -c -i)
 	    if [ $ISMUSIC -gt 0 ]; then
-		if [ ${TYPE} = "mp3" ]; then
-		    TAGS=$(id3 -q "%a\t%l\t%t\t%g\t%n\t%y" "${f}")
-		elif [ ${TYPE} = "ogg" ]; then
-		    TAGS=$(ogginfo "${f}" | egrep "ARTIST|ALBUM|TITLE|DATE|GENRE|TRACKNUMBER" | tr -d '\n' | sed 's/\s*[A-Z]*=/	/g');
-		else
-		    TAGS=""
-		fi
-		echo "${TYPE}	${f}	$TAGS"
+		echo "${TYPE}	${f}"
 	    fi
         fi
     done

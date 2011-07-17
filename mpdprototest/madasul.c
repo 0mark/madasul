@@ -37,12 +37,6 @@ enum { INC, DEC, SET };
 typedef struct track {
     int type;
     char* path;
-	char* artist;
-	char* album;
-	char* title;
-	char* date;
-	char* genre;
-	unsigned int number;
 } track;
 
 
@@ -73,7 +67,7 @@ char* play_cmds[][3]    = {
 	{ "/usr/bin/ogg123", "ogg123", "" },
 };
 // commands
-char* ctrl_cmds[] = { "stop", "pause", "play", "next", "prev", "die", "status", "random", "tracklist"};
+char* ctrl_cmds[] = { "stop", "pause", "play", "next", "prev", "die", "status", "random", "playlist"};
 
 track** tracks;
 int ctrl_sock     = -1;
@@ -82,7 +76,7 @@ int running = 0;
 pthread_mutex_t lock;
 pid_t player_pid = -1;
 int rnd = 1;
-static const int debug = 0;
+static const int debug =1;
 
 
 /* function definitions */
@@ -110,69 +104,34 @@ void sock_printf(int cmd_sock, const char *format, ...) {
 }
 
 int munchIn() {
-    char type[10], path[BUF_SIZE], artist[BUF_SIZE], album[BUF_SIZE], title[BUF_SIZE], date[BUF_SIZE], genre[BUF_SIZE], number[BUF_SIZE];
-    int i = 0, j = 0, k, len, n;
+    char type[10], buffer[BUF_SIZE];
+    int i = 0, j = 0, k, len;
 
     if((tracks = calloc(sizeof(track*), TRACKS_BUF_SIZE)) == NULL)
-        die("Lost memory on Mars Error: failed to allocate some memory\n");
+        die("Ex memoria on Mars Error: failed to allocate some memory\n");
 
     while(!feof(stdin)) {
-		n = fscanf(stdin, "%[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\n]\n", type, path, artist, album, title, date, genre, number);
-printf("%d, %d:%d, %s, %s, %s, %s\n", n,i,j,path,artist,album,title);
-		if(n!=2 && n!=8) {
+        if(fscanf(stdin, "%[^\t]\t%[^\n]\n", type, buffer)!=2) {
 			printf("Runaway Indian in the prairie of Spain Error: failed to read track line %d\n", i);
 			continue;
 		}
+        len = strlen(buffer);
 
-        if((tracks[i] = calloc(sizeof(track), /*len + */1)) == NULL)
-	        die("Lost memory on Mars Error: failed to allocate some memory\n");
-
-        len = strlen(path);
-        if((tracks[i]->path = calloc(sizeof(char), len)) == NULL)
-	        die("Lost memory on Mars Error: failed to allocate some memory\n");
-        strncpy(tracks[i]->path, path, len);
+        if((tracks[i] = calloc(sizeof(track), len + 1)) == NULL)
+	        die("Ex memoria on Mars Error: failed to allocate some memory\n");
+        if((tracks[i]->path = calloc(sizeof(char), len + 1)) == NULL)
+	        die("Ex memoria on Mars Error: failed to allocate some memory\n");
 
         for(k=0; k<LENGTH(typenames); k++)
             if(strncmp(type, typenames[k], LENGTH(typenames[k]))==0)
                 tracks[i]->type = types[k];
-
-		if(n==8) {
-			len = strlen(artist);
-			if((tracks[i]->artist = calloc(sizeof(char), len)) == NULL)
-				die("Lost memory on Mars Error: failed to allocate some memory\n");
-	        strncpy(tracks[i]->artist, artist, len);
-			len = strlen(album);
-			if((tracks[i]->album = calloc(sizeof(char), strlen(album) + 1)) == NULL)
-				die("Lost memory on Mars Error: failed to allocate some memory\n");
-	        strncpy(tracks[i]->album, album, len);
-			len = strlen(title);
-			if((tracks[i]->title = calloc(sizeof(char), strlen(title) + 1)) == NULL)
-				die("Lost memory on Mars Error: failed to allocate some memory\n");
-	        strncpy(tracks[i]->title, title, len);
-			len = strlen(date);
-			if((tracks[i]->date = calloc(sizeof(char), strlen(date) + 1)) == NULL)
-				die("Lost memory on Mars Error: failed to allocate some memory\n");
-	        strncpy(tracks[i]->date, date, len);
-			len = strlen(genre);
-			if((tracks[i]->genre = calloc(sizeof(char), strlen(genre) + 1)) == NULL)
-				die("Lost memory on Mars Error: failed to allocate some memory\n");
-	        strncpy(tracks[i]->genre, genre, len);
-			tracks[i]->number = atoi(number);
-		} else {
-			tracks[i]->artist = NULL;
-			tracks[i]->album = NULL;
-			tracks[i]->title = NULL;
-			tracks[i]->date = NULL;
-			tracks[i]->genre = NULL;
-			tracks[i]->number = 0;
-		}
-
+        strncpy(tracks[i]->path, buffer, len);
         i++;
         j++;
         if(j>=TRACKS_BUF_SIZE) {
             track **tmp = tracks;
             if((tracks = calloc(sizeof(track*), i + TRACKS_BUF_SIZE - 1)) == NULL)
-		        die("Lost memory on Mars Error: failed to allocate some memory\n");
+		        die("Ex memoria on Mars Error: failed to allocate some memory\n");
             memcpy(tracks, tmp, (i)*sizeof(track*));
             j = 0;
         }
@@ -265,9 +224,7 @@ int get_cmd(int *cmd_sock, char *val) {
 	clilen = sizeof(cli_addr);
 	if((*cmd_sock = accept(ctrl_sock, (struct sockaddr *)&cli_addr, &clilen)) < 0)
 		die("Bare feet in Nakatomi Tower Error: failed to open a socket to listen\n");
-
-	//sock_printf(*cmd_sock, "OK madasul 0.1\n");
-
+	sock_printf(*cmd_sock, "OK MPD 0.1\n");
 	n = read(*cmd_sock, buf, BUF_SIZE);
 	buf[n] = 0;
 	val[0] = 0;
@@ -337,7 +294,7 @@ void* listener() {
 							kill(player_pid, 18);
 							pauseed = 0;
 						}
-					sock_printf(cmd_sock, "OK\n");
+					sock_printf(cmd_sock, "not implemented\n");
 					break;
 				case PLAY:
 					if(strlen(val)) i = atoi(val);
@@ -382,12 +339,9 @@ void* listener() {
 					sock_printf(cmd_sock, "OK\n");
 					break;
 				case STATUS:
-					sock_printf(cmd_sock, "Track (%d of %d): %s\nGenre: %s\nArtist: %s\nAlbum: %s\nTrack: [%d] %s\n",
-						cur_track, num_tracks, tracks[cur_track]->path,
-						tracks[cur_track]->genre,
-						tracks[cur_track]->artist,
-						tracks[cur_track]->album,
-						tracks[cur_track]->number, tracks[cur_track]->title);
+					//sock_printf(cmd_sock, "Track (%d of %d): %s\n", cur_track, num_tracks, tracks[cur_track]->path);
+					//sock_printf(cmd_sock, "Random: %s\n", rnd ? "On" : "Off");
+					sock_printf(cmd_sock, "OK MPD 0.1\nvolume: 90\nrepeat: 1\ random: %d\nsingle: 0\nconsume: 0\nplaylist: 2\nplaylistlength: %d\nxfade: 0\nmixrampdb: 0.000000\nmixrampdelay: nan\nstate: %s\nsong: %d\nsongid: %d\ntime: 0:00\nelapsed: 0.0000\nbitrate: 0\naudio: 0:0:0\nnextsong: 0\nnextsongid:0\nOK\n", rnd, num_tracks, running==2?"stop":(pauseed?"pause":"play"), cur_track, cur_track);
 					break;
 				case RND:
 					if(strlen(val)) i = atoi(val);
