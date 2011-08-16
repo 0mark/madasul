@@ -5,15 +5,10 @@
 #include <unistd.h>
 #include <signal.h>
 #include <string.h>
-//#include <sys/socket.h>
-//#include <sys/types.h>
 #include <sys/un.h>
-//#include <netinet/in.h>
 #include <fcntl.h>
 #include <pthread.h>
-//#define __USE_GNU
 #include <netdb.h>
-//#include <errno.h>
 #include <sys/wait.h>
 #include <stdarg.h>
 #include "config.h"
@@ -27,7 +22,6 @@
 
 
 /* enums */
-enum { MPG, OGG, WAV, FLACC, TypeLast };
 enum { STOP, PAUSE, PLAYPAUSE, PLAY, NEXT, PREV, DIE, STATUS, SHRTSTAT, RND, LIST, SHRTLST, SETLIST, CommandLast };
 enum { INC, DEC, SET };
 enum { IM_Dying, IM_Stopped, IM_Paused, IM_Playing, StateLast };
@@ -64,14 +58,6 @@ static void* player();
 
 
 /* variables */
-// types
-char* typenames[]    = { "mp3", "mp2", "ogg", /*"wav", "wave", "flacc", */};
-int types[]          = {  MPG,   MPG,   OGG,  /* WAV,   WAV,    FLACC, */};
-// player
-char* play_cmds[][3] = {
-	{ "/usr/bin/mpg321", "mpg321", "" },
-	{ "/usr/bin/ogg123", "ogg123", "" },
-};
 // commands
 char* ctrl_cmds[]    = { "stop", "pause", "playpause", "play", "next", "prev", "die", "status", "shrtstat", "random", "tracklist", "shorttracklist", "setlist" };
 

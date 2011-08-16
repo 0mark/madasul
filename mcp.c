@@ -9,7 +9,6 @@
 #define __USE_GNU
 #include <netdb.h>
 #include <stdarg.h>
-//#include <termios.h>
 #include <regex.h>
 #include <limits.h>
 #include <strings.h>
