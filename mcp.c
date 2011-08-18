@@ -249,10 +249,12 @@ void listFromFilters(Filter *flt) {
 
 
 int main(int argc, char *argv[]) {
-    Filter *flt=NULL, *f;
+	Filter *flt=NULL, *f;
 	Filterlist *flst=NULL, *fl;
-	char buffer[256], cmd[256], c, buf[64];
+	FILE *ff;
+	char buffer[256], cmd[256], c, buf[64], ex[256];
 	int i=0, reinit = 1;
+	unsigned int ar, al, ti, ge, pa;
 	*errorstring=0;
 
 	opensock();
@@ -272,16 +274,16 @@ int main(int argc, char *argv[]) {
 			putstr(SCP GTO(5,1) CLL RCP);
 		}
 		switch(c) {
-			case 'b':
+			case 'b': // back
 				snprintf(cmd, 256, "prev %d\n", strlen(buffer) ? atoi(buffer) : 1);
 				talk2sock(cmd);
 				reinit = 1;
 				break;
-			case 's':
+			case 's': // stop
 				talk2sock("stop\n");
 				reinit = 1;
 				break;
-			case 'p':
+			case 'p': // pause
 				if(strlen(buffer))
 					snprintf(cmd, 256, "playpause %d\n", strlen(buffer) ? atoi(buffer) : 1);
 				else
@@ -289,16 +291,16 @@ int main(int argc, char *argv[]) {
 				talk2sock(cmd);
 				reinit = 1;
 				break;
-			case 'f':
+			case 'f': // forward
 				snprintf(cmd, 256, "next %d\n", strlen(buffer) ? atoi(buffer) : 1);
 				talk2sock(cmd);
 				reinit = 1;
 				break;
-			case 'r':
+			case 'r': // toggle random
 				talk2sock("random");
 				reinit = 1;
 				break;
-			case 'q':
+			case 'q': // quit
 				if(madasul_sockfd>0)
 					close(madasul_sockfd);
 				exit(0);
@@ -366,7 +368,7 @@ int main(int argc, char *argv[]) {
 				reinit = 1;
 				break;
 			case 'A': // add filter list
-			    putstr("\n"CYA"list name"MAG": "RED);
+				putstr("\n"CYA"list name"MAG": "RED);
 				if((i=readln(buffer, 256))>0) {
 					flst = calloc(sizeof(Filterlist), 1);
 					flst->name = calloc(sizeof(char), i);
@@ -392,14 +394,59 @@ int main(int argc, char *argv[]) {
 				reinit = 1;
 				break;
 			case 'w': // save all filter lists
-				for(fl=filterlists; fl; fl=fl->next) {
-					snprintf(cmd, 256, "%s:\n", fl->name);
-					putstr(cmd);
-					for(f=fl->filter; f; f=f->next){
-						snprintf(cmd, 256, "%d %d %d %d %d %s\n", f->ar, f->al, f->ti, f->ge, f->pa, f->ex);
+				snprintf(buffer, 256, "%s/madasul/filter", getenv("XDG_CONFIG_HOME"));
+				if((ff = fopen(buffer, "w"))) {
+					for(fl=filterlists; fl; fl=fl->next) {
+						fprintf(ff, "%s:\n", fl->name);
 						putstr(cmd);
+						for(f=fl->filter; f; f=f->next) {
+							fprintf(ff, "%d %d %d %d %d %s\n", f->ar, f->al, f->ti, f->ge, f->pa, f->ex);
+						}
 					}
+					strcpy(errorstring, HGRN"Saved!");
+				} else {
+					strcpy(errorstring, HYEL"Failed to open File!");
 				}
+				reinit = 1;
+				break;
+			case 'o': // open filter list
+				snprintf(buffer, 256, "%s/madasul/filter", getenv("XDG_CONFIG_HOME"));
+				if((ff = fopen(buffer, "r"))) {
+					filterlists = fl = NULL;
+					f = NULL;
+					while(ff && !feof(ff)) {
+						if(fscanf(ff, "%[^:]:\n", ex)==1) {
+							if(!fl) filterlists = fl = calloc(sizeof(Filterlist), 1);
+							else {
+								fl->next = calloc(sizeof(Filterlist), 1);
+								fl = fl->next;
+								fl->next = NULL;
+							}
+							fl->filter = f = NULL;
+							fl->name = calloc(sizeof(Filter), strlen(ex));
+							strncpy(fl->name, ex, 256);
+						} else if(fscanf(ff, "%u %u %u %u %u %[^\n]\n", &ar, &al, &ti, &ge, &pa, ex)==6) {
+							if(!f) {
+								fl->filter = f = calloc(sizeof(Filter), 1);
+							} else {
+								f->next = calloc(sizeof(Filter), 1);
+								f = f->next;
+								f->next = NULL;
+							}
+							f->ar = ar;
+							f->al = al;
+							f->ti = ti;
+							f->ge = ge;
+							f->pa = pa;
+							f->ex = calloc(sizeof(char), strlen(ex));
+							strncpy(f->ex, ex, 256);
+						}
+					}
+					strcpy(errorstring, HGRN"Loaded!");
+				} else {
+					strcpy(errorstring, HYEL"Failed to open File!");
+				}
+				reinit = 1;
 				break;
 			case 127: // DEL
 				if(i) {
