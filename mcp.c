@@ -46,6 +46,8 @@ static int talk2sock(char *cmd);
 // output
 static void head();
 static int selfields(Filter *flt);
+static void listlists();
+static void listfilters();
 // lists
 static void listFromFilters(Filter *flt);
 
@@ -166,6 +168,20 @@ void listlists() {
 		snprintf(buf, 64, HGRN"%d"GRN" %s%s", i++, l->name, l==curlist?"*":"");
 		putstr(buf);
 		if(l->next) putstr(MAG", "GRN);
+	}
+}
+
+void listfilters() {
+	Filter *f;
+	static char buf[64];
+	int i=0;
+
+	putstr("\n"CYA"Filters: "GRN);
+
+	for(f=curlist->filter; f; f=f->next) {
+		snprintf(buf, 64, HGRN"%d"GRN" %s", i++, f->ex);
+		putstr(buf);
+		if(f->next) putstr(MAG", "GRN);
 	}
 }
 
@@ -309,6 +325,27 @@ int main(int argc, char *argv[]) {
 				reinit = 1;
 				break;
 			case 'd': // delete filter from current list
+				if(!curlist) {
+					strcpy(errorstring, HYEL"No Filterlist!");
+					reinit = 1;
+					break;
+				}
+				if(!curlist->filter) {
+					strcpy(errorstring, HYEL"No Filters!");
+					reinit = 1;
+					break;
+				}
+				listfilters();
+				putstr(MAG": "CYA);
+				if(readln(buf, 64)>0) {
+					i = atoi(buf);
+					if(i>0) {
+						for(f=curlist->filter; f && (i--)>1; f=f->next);
+						f->next = (f && f->next) ? f->next->next : NULL;
+					} else
+						curlist->filter = curlist->filter ? curlist->filter->next : NULL;
+				}
+				reinit = 1;
 				break;
 			case 'u': // use current filter list
 				if(!curlist) {
@@ -342,8 +379,27 @@ int main(int argc, char *argv[]) {
 				reinit = 1;
 				break;
 			case 'D': // remove filter list
+				listlists();
+				putstr(MAG": "CYA);
+				if(readln(buf, 64)>0) {
+					i = atoi(buf);
+					if(i>0) {
+						for(flst=filterlists; flst && (i--)>1; flst=flst->next);
+						flst->next = (flst && flst->next) ? flst->next->next : NULL;
+					} else
+						filterlists = filterlists ? filterlists->next : NULL;
+				}
+				reinit = 1;
 				break;
 			case 'w': // save all filter lists
+				for(fl=filterlists; fl; fl=fl->next) {
+					snprintf(cmd, 256, "%s:\n", fl->name);
+					putstr(cmd);
+					for(f=fl->filter; f; f=f->next){
+						snprintf(cmd, 256, "%d %d %d %d %d %s\n", f->ar, f->al, f->ti, f->ge, f->pa, f->ex);
+						putstr(cmd);
+					}
+				}
 				break;
 			case 127: // DEL
 				if(i) {
