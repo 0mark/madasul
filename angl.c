@@ -40,6 +40,7 @@ struct Filterlist {
 /* function declarations */
 // helper
 static void die(const char *errstr, ...);
+static void usage();
 // socket
 static void opensock();
 static int talk2sock(char *cmd);
@@ -69,6 +70,11 @@ void die(const char *errstr, ...) {
 	exit(1);
 }
 
+void usage() {
+	fputs("angl - controls the evil media daemon\n", stderr);
+	die("usage: angl [-p port] [-h host]\n");
+}
+
 void opensock() {
 	struct sockaddr_in serv_addr;
 	struct hostent *server;
@@ -78,12 +84,12 @@ void opensock() {
 	if((madasul_sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
         die("Bare feet in Nakatomi Tower Error: failed to open socket.\n");
 
-	if((server = gethostbyname(SOCKET_ADRESS)) == NULL)
+	if((server = gethostbyname(socket_adress)) == NULL)
         die("Bare feet in Nakatomi Tower Error: failed to get hostname for socket.\n");
 	bzero((char *) &serv_addr, sizeof(serv_addr));
 	serv_addr.sin_family = AF_INET;
 	bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length);
-	serv_addr.sin_port = htons(SOCKET_PORT);
+	serv_addr.sin_port = htons(socket_port);
 
 	if(connect(madasul_sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0)
         die("Bare feet in Nakatomi Tower Error: failed to connect to socket.\n");
@@ -253,9 +259,33 @@ int main(int argc, char *argv[]) {
 	Filterlist *flst=NULL, *fl;
 	FILE *ff;
 	char buffer[256], cmd[256], c, buf[64], ex[256];
-	int i=0, reinit = 1;
+	int i=0, reinit = 1, l;
 	unsigned int ar, al, ti, ge, pa;
 	*errorstring=0;
+
+	for(i = 1; i < argc && argv[i][0] == '-' && argv[i][1] != '\0' && argv[i][2] == '\0'; i++) {
+		if(!strcmp(argv[i], "--")) {
+			i++;
+			break;
+		}
+		switch(argv[i][1]) {
+			case 'p':
+				if(++i < argc)
+					socket_port = atoi(argv[i]);
+				else
+					usage();
+				break;
+			case 'h':
+				if(++i < argc) {
+					free(socket_adress);
+					l = strlen(argv[i]);
+					socket_adress = calloc(sizeof(char), l);
+					strncpy(socket_adress, argv[i], l);
+				} else
+					usage();
+				break;
+		}
+	}
 
 	opensock();
 	head();

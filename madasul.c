@@ -44,6 +44,7 @@ typedef struct track {
 // helper
 static void die(const char *errstr, ...);
 static void sock_printf(int cmd_sock, const char *format, ...);
+static void usage(void);
 // init
 static int munchIn();
 static int opensock();
@@ -73,6 +74,7 @@ pid_t player_pid = -1;
 int rnd = 0;
 static const int debug = 0;
 int* playlist = NULL;
+char *listfile = NULL;
 
 
 /* function definitions */
@@ -99,15 +101,24 @@ void sock_printf(int cmd_sock, const char *format, ...) {
 	va_end(ap);
 }
 
+void usage() {
+	fputs("madasul - evil media daemon\n", stderr);
+	die("usage: madasul [-p port] [-f list file]\n");
+}
+
 int munchIn() {
+    FILE *f;
     char type[10], path[BUF_SIZE], artist[BUF_SIZE], album[BUF_SIZE], title[BUF_SIZE], date[BUF_SIZE], genre[BUF_SIZE], number[BUF_SIZE];
     int i = 0, j = 0, k, len, n;
 
     if((tracks = calloc(sizeof(track*), TRACKS_BUF_SIZE)) == NULL)
         die("Lost memory on Mars Error: failed to allocate some memory\n");
 
-    while(!feof(stdin)) {
-		n = fscanf(stdin, "%[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\n]\n", type, path, artist, album, title, date, genre, number);
+    if(!(f = fopen(listfile, "r")))
+        die("[TODO: find puny punch line!]: failed to open file %s\n", listfile);
+
+    while(!feof(f)) {
+		n = fscanf(f, "%[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\n]\n", type, path, artist, album, title, date, genre, number);
 //printf("%d, %d:%d, %s, %s, %s, %s\n", n,i,j,path,artist,album,title);
 		if(n!=2 && n!=8) {
 			printf("Runaway Indian in the prairie of Spain Error: failed to read track line %d\n", i);
@@ -168,7 +179,7 @@ int munchIn() {
         }
     }
 
-    if(ferror(stdin)) {
+    if(ferror(f)) {
         free(tracks);
         perror("Error reading from stdin.");
         return -1;
@@ -190,7 +201,7 @@ int opensock() {
     //server = gethostbyname(SOCKET_ADRESS);
 	sain.sin_addr.s_addr = INADDR_ANY;
     sain.sin_family = AF_INET;
-    sain.sin_port = htons(SOCKET_PORT);
+    sain.sin_port = htons(socket_port);
     //bcopy((char *)server->h_addr, (char *)&sain.sin_addr.s_addr, server->h_length);
 	//strcpy(sain.sin_addr, SOCKET_ADRESS);
     len = sizeof(sain.sin_family) + sizeof(sain);
@@ -503,8 +514,38 @@ void* player() {
 	return NULL;
 }
 
-int main(/*int argc, char *argv[]*/) {
+int main(int argc, char *argv[]) {
 	pthread_t p_player, p_listener;
+	int i, l;
+
+
+	for(i = 1; i < argc && argv[i][0] == '-' && argv[i][1] != '\0' && argv[i][2] == '\0'; i++) {
+		if(!strcmp(argv[i], "--")) {
+			i++;
+			break;
+		}
+		switch(argv[i][1]) {
+			case 'p':
+				if(++i < argc)
+					socket_port = atoi(argv[i]);
+				else
+					usage();
+				break;
+			case 'f':
+				if(++i < argc) {
+					l = strlen(argv[i]);
+					listfile = calloc(sizeof(char), l);
+					strncpy(listfile, argv[i], l);
+				} else
+					usage();
+				break;
+		}
+	}
+	if(listfile==NULL) {
+		l = strlen(getenv("XDG_CONFIG_HOME"));
+		listfile = calloc(sizeof(char), l+14);
+		snprintf(listfile, 256, "%s/madasul/list", getenv("XDG_CONFIG_HOME"));
+	}
 
 	srandom((unsigned int)time(NULL));
 	num_tracks = munchIn();

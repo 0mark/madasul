@@ -11,6 +11,7 @@ function readdir {
 		if [ ${TYPE} = "mp3" ]; then
 		    TAGS=$(id3 -q "%a\t%l\t%t\t%g\t%n\t%y" "${f}")
 		elif [ ${TYPE} = "ogg" ]; then
+		    // CRAP!
 		    TAGS=$(ogginfo "${f}" | egrep "ARTIST|ALBUM|TITLE|DATE|GENRE|TRACKNUMBER" | tr -d '\n' | sed 's/\s*[A-Z]*=/	/g');
 		else
 		    TAGS=""
