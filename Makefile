@@ -41,10 +41,12 @@ clean:
 install:
 	@echo installing executable file to ${DESTDIR}${PREFIX}/bin
 	@mkdir -p ${DESTDIR}${PREFIX}/bin
-	@cp -f madasul angl ${PREFIX}/bin
+	@cp -f madasul angl mcp mlg ${PREFIX}/bin
 	@chmod 755 ${DESTDIR}${PREFIX}/bin/madasul
 	@chmod 755 ${DESTDIR}${PREFIX}/bin/angl
-	@sed "s#MADASULSRC#${PREFIX}/share/madasul/src/#g" < dwmm > ${DESTDIR}${PREFIX}/bin/madasulm
+	@chmod 755 ${DESTDIR}${PREFIX}/bin/mcp
+	@chmod 755 ${DESTDIR}${PREFIX}/bin/mlg
+	@sed "s#MADASULSRC#${PREFIX}/share/madasul/src/#g" < madasulm > ${DESTDIR}${PREFIX}/bin/madasulm
 	@chmod 755 ${DESTDIR}${PREFIX}/bin/madasulm
 	@echo installing manual page to ${DESTDIR}${MANPREFIX}/man1
 	@sed "s/VERSION/${VERSION}/g" < madasul.1 > ${DESTDIR}${MANPREFIX}/man1/madasul.1
@@ -55,4 +57,9 @@ install:
 
 uninstall:
 	rm ${PREFIX}/bin/madasul
+	rm ${DESTDIR}${MANPREFIX}/man1/madasul.1
 	rm ${PREFIX}/bin/angl
+	rm ${DESTDIR}${MANPREFIX}/man1/angl.1
+	rm ${PREFIX}/bin/madasulm
+	rm ${PREFIX}/bin/mcp
+	rm ${PREFIX}/bin/mlg
