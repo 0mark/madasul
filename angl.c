@@ -198,7 +198,7 @@ void listFromFilters(Filter *flt) {
 	unsigned int tracknum, atrack, rm, i = 0;
 	int maxnumlen = (sizeof(int) * 8) / 3 + 1; // a bit higher than the real value...
 
-	if((list=calloc(sizeof(char), BUF_SIZE))==NULL) {
+	if((list=calloc(BUF_SIZE, sizeof(char)))==NULL) {
 		strcpy(errorstring, "Failed to allocate buffer");
 		return;
 	}
@@ -279,7 +279,7 @@ int main(int argc, char *argv[]) {
 				if(++i < argc) {
 					free(socket_adress);
 					l = strlen(argv[i]);
-					socket_adress = calloc(sizeof(char), l);
+					socket_adress = calloc(l, sizeof(char));
 					strncpy(socket_adress, argv[i], l);
 				} else
 					usage();
@@ -341,13 +341,13 @@ int main(int argc, char *argv[]) {
 					reinit = 1;
 					break;
 				}
-				flt = calloc(sizeof(Filter), 1);
+				flt = calloc(1, sizeof(Filter));
 				flt->al = flt->ar = flt->ti = flt->ge = flt->pa = 0;
 				flt->next = NULL;
 				if(selfields(flt)) {
 					putstr("\n"CYA"regex"MAG": "RED);
 					if((i=readln(buffer, 256))>0) {
-						flt->ex = calloc(sizeof(char), i);
+						flt->ex = calloc(i, sizeof(char));
 						memcpy(flt->ex, buffer, i);
 						LAST(f, curlist->filter);
 						if(f) f->next = flt;
@@ -400,8 +400,8 @@ int main(int argc, char *argv[]) {
 			case 'A': // add filter list
 				putstr("\n"CYA"list name"MAG": "RED);
 				if((i=readln(buffer, 256))>0) {
-					flst = calloc(sizeof(Filterlist), 1);
-					flst->name = calloc(sizeof(char), i);
+					flst = calloc(1, sizeof(Filterlist));
+					flst->name = calloc(i, sizeof(char));
 					memcpy(flst->name, buffer, i);
 					LAST(fl, filterlists);
 					if(fl) fl->next = flst;
@@ -433,9 +433,10 @@ int main(int argc, char *argv[]) {
 							fprintf(ff, "%d %d %d %d %d %s\n", f->ar, f->al, f->ti, f->ge, f->pa, f->ex);
 						}
 					}
+					fclose(ff);
 					strcpy(errorstring, HGRN"Saved!");
 				} else {
-					strcpy(errorstring, HYEL"Failed to open File!");
+					strcpy(errorstring, HYEL"Failed to open File for write!");
 				}
 				reinit = 1;
 				break;
@@ -445,21 +446,11 @@ int main(int argc, char *argv[]) {
 					filterlists = fl = NULL;
 					f = NULL;
 					while(ff && !feof(ff)) {
-						if(fscanf(ff, "%[^:]:\n", ex)==1) {
-							if(!fl) filterlists = fl = calloc(sizeof(Filterlist), 1);
-							else {
-								fl->next = calloc(sizeof(Filterlist), 1);
-								fl = fl->next;
-								fl->next = NULL;
-							}
-							fl->filter = f = NULL;
-							fl->name = calloc(sizeof(Filter), strlen(ex));
-							strncpy(fl->name, ex, 256);
-						} else if(fscanf(ff, "%u %u %u %u %u %[^\n]\n", &ar, &al, &ti, &ge, &pa, ex)==6) {
+						if(fscanf(ff, "%u %u %u %u %u %[^\n]\n", &ar, &al, &ti, &ge, &pa, ex)==6) {
 							if(!f) {
-								fl->filter = f = calloc(sizeof(Filter), 1);
+								fl->filter = f = calloc(1, sizeof(Filter));
 							} else {
-								f->next = calloc(sizeof(Filter), 1);
+								f->next = calloc(1, sizeof(Filter));
 								f = f->next;
 								f->next = NULL;
 							}
@@ -468,10 +459,24 @@ int main(int argc, char *argv[]) {
 							f->ti = ti;
 							f->ge = ge;
 							f->pa = pa;
-							f->ex = calloc(sizeof(char), strlen(ex));
-							strncpy(f->ex, ex, 256);
+							f->ex = calloc(strlen(ex), sizeof(char));
+							strncpy(f->ex, ex, strlen(ex));
+						} else if(fscanf(ff, "%[^:]:\n", ex)==1) {
+							if(!fl) {
+								filterlists = (fl = calloc(1, sizeof(Filterlist)));
+							} else {
+								fl->next = calloc(1, sizeof(Filterlist));
+								fl = fl->next;
+								fl->next = NULL;
+							}
+							fl->filter = f = NULL;
+							printf("%d\n", strlen(ex));
+							fl->name = calloc(strlen(ex), sizeof(char));
+							strncpy(fl->name, ex, strlen(ex));
 						}
+
 					}
+					if(filterlists) curlist = filterlists;
 					strcpy(errorstring, HGRN"Loaded!");
 				} else {
 					strcpy(errorstring, HYEL"Failed to open File!");

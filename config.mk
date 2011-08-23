@@ -15,7 +15,7 @@ INCS = -I. -I/usr/include
 LIBS = -L/usr/lib -lc -lpthread
 
 CPPFLAGS = -DVERSION=\"${VERSION}\"
-CFLAGS = -std=c99 -pedantic -Wall -Os -D_REENTRANT ${INCS} ${CPPFLAGS}
+CFLAGS = -g -std=c99 -pedantic -Wall -Os -D_REENTRANT ${INCS} ${CPPFLAGS}
 LDFLAGS = ${LIBS}
 
 # compiler and linker
