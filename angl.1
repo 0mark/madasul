@@ -1,38 +1,45 @@
-.TH mcp 1 mcp\-VERSION
+.TH angl 1 angl\-VERSION
 .SH NAME
-madasul control program - the deamon whisperer!
+angl \- talks to madasul
 .SH SYNOPSIS
-.B mcp
-.RB [ \-... ]
+.B madasul
+.RB [-p\ port]
+.RB [-h\ host]
 .SH DESCRIPTION
-Dinge
-.P
-See
-.B STUFF
-i you like
-.P
-DONGE
+Simple front end for madasul. Angl does not provide playlists, but sets of regexp filters on metadata.
 .SH OPTIONS
 .TP
-.B \-...
-parameters come
+.B \-p
+Use port (default: 6666, since 666 is used by doom)
+.TP
+.B \-h
+Connect to host (default: localhost)
 .SH USAGE
-.SS Socket commands
+.SS commands
 .TP
-.B cmd1
-bla
-.BR some cmd 
-blub.
+.B [num] b,p,f
+prev (Before), Playpause, next (Forward)
 .TP
-.B cmd2
-laber
-.SS other
+.B r
+toggle Random
 .TP
-.B kling
-klang
+.B q,s
+Quit, Stop
+.TP
+.B a,d
+Add or Delete a filter in current filterlist
+.B A,D,l
+Add, Delete or seLect a filterlist
+.TP
+.B w,o
+Write or Open a filterlist
+.BR overwrites\ without\ question!
+.TP
+.B u
+Use current filerlist
 .SH CUSTOMIZATION
 config.h
 .SH SEE ALSO
-.BR interesting stuff
+.BR madasul
 .SH BUGS
 DAS GANZE GEHIRN WEGGESLUTSCHT

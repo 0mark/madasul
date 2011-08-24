@@ -290,6 +290,7 @@ int main(int argc, char *argv[]) {
 	opensock();
 	head();
 
+	// TODO: Should be in a function
 	while(1) {
 		if(reinit){
 			reinit = 0;
@@ -303,6 +304,7 @@ int main(int argc, char *argv[]) {
 			*errorstring = 0;
 			putstr(SCP GTO(5,1) CLL RCP);
 		}
+		// TODO: this is awefull!
 		switch(c) {
 			case 'b': // back
 				snprintf(cmd, 256, "prev %d\n", strlen(buffer) ? atoi(buffer) : 1);
@@ -444,6 +446,7 @@ int main(int argc, char *argv[]) {
 				snprintf(buffer, 256, "%s/madasul/filter", getenv("XDG_CONFIG_HOME"));
 				if((ff = fopen(buffer, "r"))) {
 					filterlists = fl = NULL;
+					// TODO: Fix this memory leak, its leaking and my carpet is new!
 					f = NULL;
 					while(ff && !feof(ff)) {
 						if(fscanf(ff, "%u %u %u %u %u %[^\n]\n", &ar, &al, &ti, &ge, &pa, ex)==6) {

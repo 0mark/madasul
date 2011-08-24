@@ -22,7 +22,7 @@
 
 
 /* enums */
-enum { STOP, PAUSE, PLAYPAUSE, PLAY, NEXT, PREV, DIE, STATUS, SHRTSTAT, RND, LIST, SHRTLST, SETLIST, CommandLast };
+enum { STOP, PAUSE, PLAYPAUSE, PLAY, NEXT, PREV, DIE, STATUS, SHRTSTAT, RND, LIST, SHRTLST, SETLIST, SHOWLIST, CommandLast };
 enum { INC, DEC, SET };
 enum { IM_Dying, IM_Stopped, IM_Paused, IM_Playing, StateLast };
 
@@ -45,6 +45,7 @@ typedef struct track {
 static void die(const char *errstr, ...);
 static void sock_printf(int cmd_sock, const char *format, ...);
 static void usage(void);
+// TODO: malloc wrapper
 // init
 static int munchIn();
 static int opensock();
@@ -60,7 +61,7 @@ static void* player();
 
 /* variables */
 // commands
-char* ctrl_cmds[]    = { "stop", "pause", "playpause", "play", "next", "prev", "die", "status", "shrtstat", "random", "tracklist", "shorttracklist", "setlist" };
+char* ctrl_cmds[]    = { "stop", "pause", "playpause", "play", "next", "prev", "die", "status", "shrtstat", "random", "tracklist", "shorttracklist", "setlist", "showlist" };
 
 track** tracks;        // Array of pointers to track structs.
 int ctrl_sock = -1;
@@ -94,9 +95,6 @@ void sock_printf(int cmd_sock, const char *format, ...) {
 	va_start(ap, format);
 	vsnprintf(msg, BUF_SIZE, format, ap);
 
-	//if(debug)
-	//	printf("to socket: %s\n", msg);
-
 	send(cmd_sock, msg, strlen(msg), MSG_NOSIGNAL);
 	va_end(ap);
 }
@@ -119,7 +117,6 @@ int munchIn() {
 
     while(!feof(f)) {
 		n = fscanf(f, "%[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\n]\n", type, path, artist, album, title, date, genre, number);
-//printf("%d, %d:%d, %s, %s, %s, %s\n", n,i,j,path,artist,album,title);
 		if(n!=2 && n!=8) {
 			printf("Runaway Indian in the prairie of Spain Error: failed to read track line %d\n", i);
 			continue;
@@ -188,7 +185,7 @@ int munchIn() {
     return i;
 }
 
-int opensock() {
+int opensock() { // TODO: clean up
     int len;
     struct sockaddr_in sain;
     //struct hostent *server;
@@ -232,7 +229,7 @@ pid_t play(track* track, int* infp, int* outfp) {
 
     if(pid < 0)
         die("There is no Fork in Zion Error: failed to fork\n");
-    else if (pid == 0) { // 
+    else if (pid == 0) { //
         close(p_stdin[WRITE]);
         dup2(p_stdin[READ], READ);
         close(p_stdout[READ]);
@@ -240,7 +237,7 @@ pid_t play(track* track, int* infp, int* outfp) {
         snprintf(path, BUF_SIZE+2, "\"%s\"", track->path);
 		execl(play_cmds[type][0], play_cmds[type][1], track->path, play_cmds[type][2], NULL);
         // we should not be here, it means the exec did not work...
-		die("Conduction error in Cold Mountain: failed to exec\n");
+		die("[TODO]: failed to exec\n");
     }
 
     if(infp==NULL)
@@ -266,8 +263,6 @@ int get_cmd(int *cmd_sock, char *val) {
 	clilen = sizeof(cli_addr);
 	if((*cmd_sock = accept(ctrl_sock, (struct sockaddr *)&cli_addr, &clilen)) < 0)
 		die("Bare feet in Nakatomi Tower Error: failed to open a socket to listen\n");
-
-	//sock_printf(*cmd_sock, "There is only madasul\n");
 
 	n = read(*cmd_sock, buf, BUF_SIZE);
 	buf[n] = 0;
@@ -408,7 +403,7 @@ void* listener() {
 				case SHRTSTAT:
 					sock_printf(cmd_sock, "%d\t%d\t%d\t%d\t%s\t%s\t%s\t%s\t%d\t%s\n",
 						cur_track, num_tracks,
-						state/*state==2 ? 0 : (pauseed ? 2 : 1)*/, rnd,
+						state, rnd,
 						tracks[cur_track]->path,
 						tracks[cur_track]->genre,
 						tracks[cur_track]->artist,
@@ -426,8 +421,13 @@ void* listener() {
 					break;
 				case LIST:
 					for(i=0; i<num_tracks; i++)
-						sock_printf(cmd_sock, "%d:file: %s\n", i, tracks[i]->path);
-					sock_printf(cmd_sock, "OK\n", cur_track, tracks[cur_track]->path);
+						sock_printf(cmd_sock, "%d:\t%s\n""\t[%s] (%s - %s - %d) %s\n",
+							i, tracks[i]->path,
+							tracks[i]->genre,
+							tracks[i]->artist,
+							tracks[i]->album,
+							tracks[i]->number,
+							tracks[i]->title);
 					break;
 				case SHRTLST:
 					for(i=0; i<num_tracks; i++)
@@ -438,7 +438,6 @@ void* listener() {
 							tracks[i]->album,
 							tracks[i]->number,
 							tracks[i]->title);
-					sock_printf(cmd_sock, "OK\n", cur_track, tracks[cur_track]->path);
 					break;
 				case SETLIST:
 					i = ii = iii = 0;
@@ -454,9 +453,7 @@ void* listener() {
 								playlist[ii++] = atoi(abuf);
 								iii++;
 								if(iii>TRACKS_BUF_SIZE) {
-									//o = playlist;
 									playlist = realloc(playlist, sizeof(int) * (ii + TRACKS_BUF_SIZE));
-									//memcpy(playlist, o, sizeof(int)*iii);
 									iii = 0;
 								}
 								i = 0;
@@ -466,7 +463,7 @@ void* listener() {
 								else {
 									sock_printf(cmd_sock, "invalid list\n");
 									close(cmd_sock);
-									return NULL; // I do not think that that is good idea!
+									return NULL; // TODO: Is this a good idea?
 								}
 							}
 							buf++;
@@ -474,8 +471,10 @@ void* listener() {
 					} while((n = read(cmd_sock, val, BUF_SIZE))>0);
 					num_pl_tracks = ii + 1;
 					scout(SET,0);
-					//for(i=0; i<num_pl_tracks; i++)
-						//printf("%d: %d\n", i, playlist[i]);
+					break;
+				case SHOWLIST:
+					for(i=0; i<num_pl_tracks; i++)
+						sock_printf(cmd_sock, "%d (%d): %s\n", i, playlist[i], tracks[playlist[i]]->title);
 					break;
 				default:
 					sock_printf(cmd_sock, "unknown command\n");
@@ -491,9 +490,7 @@ void* listener() {
 }
 
 void* player() {
-	//FILE* fp;
     int infp, /*w, */outfp, stat;
-    //char line[BUF_SIZE];
 
 	if(player_pid>=0)
 		die("Heile Welt at Sehbuehl Error: pid is already in use\n");
@@ -502,8 +499,8 @@ void* player() {
 	player_pid = play(tracks[cur_track], &infp, &outfp);
 	pthread_mutex_unlock(&lock);
 
-	/*w = */waitpid(player_pid, &stat, 0);
-	if(WIFEXITED(stat)!=0) // WEXITSTATUS(stat_val)
+	waitpid(player_pid, &stat, 0);
+	if(WIFEXITED(stat)!=0)
 		scout(INC, 1);
 
 	player_pid = -1;
@@ -541,6 +538,7 @@ int main(int argc, char *argv[]) {
 				break;
 		}
 	}
+
 	if(listfile==NULL) {
 		l = strlen(getenv("XDG_CONFIG_HOME"));
 		listfile = calloc(sizeof(char), l+14);

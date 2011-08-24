@@ -53,7 +53,7 @@ install:
 	@sed "s/VERSION/${VERSION}/g" < angl.1 > ${DESTDIR}${MANPREFIX}/man1/angl.1
 	@echo installing src files to ${DESTDIR}${PREFIX}/share/madasul
 	@mkdir -p ${DESTDIR}${PREFIX}/share/madasul/src
-	@cp -Rf madasul.c config.def.h config.mk Makefile ${DESTDIR}${PREFIX}/share/madasul/src
+	@cp -Rf madasul.c config.def.h config.mk Makefile angl.c ansi.c ansi.h ${DESTDIR}${PREFIX}/share/madasul/src
 
 uninstall:
 	rm ${PREFIX}/bin/madasul
