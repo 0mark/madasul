@@ -3,7 +3,7 @@ VERSION = "666.0.1"
 
 # paths
 PREFIX = /usr/local
-MANPREFIX = ${PREFIX}/share/man
+MANPREFIX = ${PREFIX}/man
 
 # dbus/notify adds ~250k mem usage
 #NOTIFY_INCS = `pkg-config --cflags dbus-1`
