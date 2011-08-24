@@ -49,6 +49,7 @@ install:
 	@sed "s#MADASULSRC#${PREFIX}/share/madasul/src/#g" < madasulm > ${DESTDIR}${PREFIX}/bin/madasulm
 	@chmod 755 ${DESTDIR}${PREFIX}/bin/madasulm
 	@echo installing manual page to ${DESTDIR}${MANPREFIX}/man1
+	@mkdir -p ${DESTDIR}${PREFIX}/man1
 	@sed "s/VERSION/${VERSION}/g" < madasul.1 > ${DESTDIR}${MANPREFIX}/man1/madasul.1
 	@sed "s/VERSION/${VERSION}/g" < angl.1 > ${DESTDIR}${MANPREFIX}/man1/angl.1
 	@echo installing src files to ${DESTDIR}${PREFIX}/share/madasul
