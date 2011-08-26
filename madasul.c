@@ -178,7 +178,12 @@ int munchIn() {
 
     if(ferror(f)) {
         free(tracks);
-        perror("Error reading from stdin.");
+	die("[TODO: find another punchline]: failed to read from file\n");
+        return -1;
+    }
+    if(i<1) {
+        free(tracks);
+	die("No Tracks found. Nothing to do. I'm off.\n");
         return -1;
     }
 
