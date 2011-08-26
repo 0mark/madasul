@@ -1,0 +1,14 @@
+*** temporary excuse for a readme...
+
+[build]
+$ make
+and
+$ make install
+should work
+
+[using]
+Create a directory 'madasul' in $XDG_CONFIG_HOME
+A playlist is needed (defasult: $XDG_CONFIG_HOME/madasul/list), to create one you can run 
+$ mlg /path/to/your/music
+To get meta tags, ogginfo and id3 are needed
+The default config needs mpg321, ogg123 and mplayer for other formats
