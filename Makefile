@@ -5,7 +5,7 @@ MD_OBJ = ${MD_SRC:.c=.o}
 MC_SRC = angl.c ansi.c
 MC_OBJ = ${MC_SRC:.c=.o}
 
-all: options madasul angl
+all: options madasul #angl
 
 options:
 	@echo build options:
