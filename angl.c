@@ -13,12 +13,14 @@
 #include <limits.h>
 #include <strings.h>
 #include "ansi.h"
-#include "config.h"
 
 
 /* macros */
 #define aprintf(STR, ...)   snprintf(STR+strlen(STR), BUF_SIZE-strlen(STR), __VA_ARGS__)
 #define LAST(E, L)          for(E=L; E && E->next; E = E->next);
+
+#define BUF_SIZE           1024
+#define TRACKS_BUF_SIZE	   128
 
 
 /* structs */
@@ -58,6 +60,8 @@ int madasul_sockfd;
 char errorstring[256];
 Filterlist *filterlists = NULL;
 Filterlist *curlist = NULL;
+static int socket_port     = 6666;
+static char *socket_adress = "127.0.0.1";
 
 
 /* function definitions */

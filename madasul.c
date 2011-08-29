@@ -11,7 +11,6 @@
 #include <netdb.h>
 #include <sys/wait.h>
 #include <stdarg.h>
-#include "config.h"
 
 /* macros */
 #define LENGTH(X)          (sizeof X / sizeof X[0])
@@ -19,10 +18,11 @@
 #define READ               0
 #define WRITE              1
 #define ERR                2
-
+#define BUF_SIZE           1024
+#define TRACKS_BUF_SIZE	   128
 
 /* enums */
-enum { STOP, PAUSE, PLAYPAUSE, PLAY, NEXT, PREV, DIE, STATUS, SHRTSTAT, RND, LIST, SHRTLST, SETLIST, SHOWLIST, CommandLast };
+enum { STOP, PAUSE, PLAYPAUSE, PLAY, NEXT, PREV, DIE, STATUS, SHRTSTAT, RND, LIST, SHRTLST, SETLIST, SHOWLIST, LOADLIST, CommandLast };
 enum { INC, DEC, SET };
 enum { IM_Dying, IM_Stopped, IM_Paused, IM_Playing, StateLast };
 
@@ -39,6 +39,12 @@ typedef struct track {
 	unsigned int number;
 } track;
 
+typedef struct handler {
+	char* executable;
+	int out;
+} handler;
+
+#include "config.h"
 
 /* function declarations */
 // helper
@@ -61,8 +67,8 @@ static void* player();
 
 /* variables */
 // commands
-char* ctrl_cmds[]    = { "stop", "pause", "playpause", "play", "next", "prev", "die", "status", "shrtstat", "random", "tracklist", "shorttracklist", "setlist", "showlist" };
-
+char* ctrl_cmds[]    = { "stop", "pause", "playpause", "play", "next", "prev", "die", "status", "shrtstat", "random", "tracklist", "shorttracklist", "setlist", "showlist", "loadlist" };
+static int socket_port     = 6666;
 track** tracks;        // Array of pointers to track structs.
 int ctrl_sock = -1;
 int cur_track = 0;     // current track in track list
@@ -70,6 +76,7 @@ int cur_pl_track = 0;  // current track in playlist or tracklist. Only used by s
 int num_tracks;
 int num_pl_tracks;
 int state = IM_Stopped;
+int userlistprovided = 0;
 pthread_mutex_t lock;
 pid_t player_pid = -1;
 int rnd = 0;
@@ -112,11 +119,14 @@ int munchIn() {
     if((tracks = calloc(sizeof(track*), TRACKS_BUF_SIZE)) == NULL)
         die("Lost memory on Mars Error: failed to allocate some memory\n");
 
-    if(!(f = fopen(listfile, "r")))
-        die("[TODO: find puny punch line!]: failed to open file %s\n", listfile);
+    if(!(f = fopen(listfile, "r"))) {
+        if(userlistprovided)
+        	die("[TODO: find puny punch line!]: failed to open file %s\n", listfile);
+        else return -1;
+    }
 
     while(!feof(f)) {
-		n = fscanf(f, "%[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\n]\n", type, path, artist, album, title, date, genre, number);
+		n = fscanf(f, "%10[^\t]\t%1023[^\t]\t%1023[^\t]\t%1023[^\t]\t%1023[^\t]\t%1023[^\t]\t%1023[^\t]\t%1023[^\n]\n", type, path, artist, album, title, date, genre, number);
 		if(n!=2 && n!=8) {
 			printf("Runaway Indian in the prairie of Spain Error: failed to read track line %d\n", i);
 			continue;
@@ -126,33 +136,33 @@ int munchIn() {
 	        die("Lost memory on Mars Error: failed to allocate some memory\n");
 
         len = strlen(path);
-        if((tracks[i]->path = calloc(sizeof(char), len)) == NULL)
+        if((tracks[i]->path = calloc(sizeof(char), len+1)) == NULL)
 	        die("Lost memory on Mars Error: failed to allocate some memory\n");
         strncpy(tracks[i]->path, path, len);
 
         for(k=0; k<LENGTH(typenames); k++)
-            if(strncmp(type, typenames[k], LENGTH(typenames[k]))==0)
+            if(strncmp(type, typenames[k], LENGTH(typenames[k]) || strncmp("*", typenames[k], 1))==0)
                 tracks[i]->type = types[k];
 
 		if(n==8) {
 			len = strlen(artist);
-			if((tracks[i]->artist = calloc(sizeof(char), len)) == NULL)
+			if((tracks[i]->artist = calloc(sizeof(char), len + 1)) == NULL)
 				die("Lost memory on Mars Error: failed to allocate some memory\n");
 	        strncpy(tracks[i]->artist, artist, len);
 			len = strlen(album);
-			if((tracks[i]->album = calloc(sizeof(char), strlen(album) + 1)) == NULL)
+			if((tracks[i]->album = calloc(sizeof(char), len + 1)) == NULL)
 				die("Lost memory on Mars Error: failed to allocate some memory\n");
 	        strncpy(tracks[i]->album, album, len);
 			len = strlen(title);
-			if((tracks[i]->title = calloc(sizeof(char), strlen(title) + 1)) == NULL)
+			if((tracks[i]->title = calloc(sizeof(char), len + 1)) == NULL)
 				die("Lost memory on Mars Error: failed to allocate some memory\n");
 	        strncpy(tracks[i]->title, title, len);
 			len = strlen(date);
-			if((tracks[i]->date = calloc(sizeof(char), strlen(date) + 1)) == NULL)
+			if((tracks[i]->date = calloc(sizeof(char), len + 1)) == NULL)
 				die("Lost memory on Mars Error: failed to allocate some memory\n");
 	        strncpy(tracks[i]->date, date, len);
 			len = strlen(genre);
-			if((tracks[i]->genre = calloc(sizeof(char), strlen(genre) + 1)) == NULL)
+			if((tracks[i]->genre = calloc(sizeof(char), len + 1)) == NULL)
 				die("Lost memory on Mars Error: failed to allocate some memory\n");
 	        strncpy(tracks[i]->genre, genre, len);
 			tracks[i]->number = atoi(number);
@@ -178,14 +188,10 @@ int munchIn() {
 
     if(ferror(f)) {
         free(tracks);
-	die("[TODO: find another punchline]: failed to read from file\n");
+		die("[TODO: find another punchline]: failed to read from file\n");
         return -1;
     }
-    if(i<1) {
-        free(tracks);
-	die("No Tracks found. Nothing to do. I'm off.\n");
-        return -1;
-    }
+    fclose(f);
 
     return i;
 }
@@ -199,6 +205,7 @@ int opensock() { // TODO: clean up
         die("Bare feet in Nakatomi Tower Error: failed to open socket.\n");
 
 	//flags = fcntl(ctrl_sock, F_GETFL, 0);
+	//fcntl(ctrl_sock, SO_REUSEADDR, 0);
 
     //server = gethostbyname(SOCKET_ADRESS);
 	sain.sin_addr.s_addr = INADDR_ANY;
@@ -225,7 +232,9 @@ int opensock() { // TODO: clean up
 pid_t play(track* track, int* infp, int* outfp) {
     int p_stdin[2], p_stdout[2], type = track->type;
     pid_t pid;
-	char path[BUF_SIZE+2];
+	static char pbuf[BUF_SIZE], spbuf[BUF_SIZE];
+	char *p, *ps[16];
+	int i = 0;
 
     if(pipe(p_stdin) != 0 || pipe(p_stdout) != 0)
         die("No Pizza in the Sewer Error: failed to open pipe\n");
@@ -238,9 +247,19 @@ pid_t play(track* track, int* infp, int* outfp) {
         close(p_stdin[WRITE]);
         dup2(p_stdin[READ], READ);
         close(p_stdout[READ]);
-        dup2(p_stdout[WRITE], ERR);
-        snprintf(path, BUF_SIZE+2, "\"%s\"", track->path);
-		execl(play_cmds[type][0], play_cmds[type][1], track->path, play_cmds[type][2], NULL);
+        dup2(p_stdout[WRITE], handlers[type].out);
+		strncpy(pbuf, handlers[type].executable, BUF_SIZE);
+
+		p = strtok(pbuf," ");
+		while(p!=NULL && i<15) {
+	        snprintf(spbuf, BUF_SIZE, p, track->path);
+			ps[i] = calloc(strlen(spbuf)+1, sizeof(char));
+			strncpy(ps[i++], spbuf, strlen(spbuf));
+			p = strtok(NULL, " ,");
+		}
+		ps[i] = NULL;
+
+		execvp(ps[0], ps);
         // we should not be here, it means the exec did not work...
 		die("[TODO]: failed to exec\n");
     }
@@ -268,10 +287,10 @@ int get_cmd(int *cmd_sock, char *val) {
 	clilen = sizeof(cli_addr);
 	if((*cmd_sock = accept(ctrl_sock, (struct sockaddr *)&cli_addr, &clilen)) < 0)
 		die("Bare feet in Nakatomi Tower Error: failed to open a socket to listen\n");
-
+	*buf = 0;
 	n = read(*cmd_sock, buf, BUF_SIZE);
 	buf[n] = 0;
-	val[0] = 0;
+	*val = 0;
 
 	if(debug)
 		printf("command: %s\n", buf);
@@ -284,8 +303,10 @@ int get_cmd(int *cmd_sock, char *val) {
 				break;
 			}
 		}
-		if(n>len)
-			strncpy(val, buf+len+1, n-len-1);
+		if(n-len-2>0) {
+			strncpy(val, buf+len+1, n-len-2);
+			val[n-len-2] = 0;
+		}
 	}
 
 	return cmd;
@@ -294,6 +315,10 @@ int get_cmd(int *cmd_sock, char *val) {
 // you know, like track selection...
 void scout(unsigned int whatdo, unsigned int val) {
 	int nt = playlist==NULL ? num_tracks: num_pl_tracks;
+
+	if(num_tracks<1)
+		return;
+
 	pthread_mutex_lock(&lock);
 	switch(whatdo) {
 		case INC:
@@ -349,6 +374,10 @@ void* listener() {
 						state = StateLast;
 					}
 				case PLAY:
+					if(num_tracks<1) {
+						sock_printf(cmd_sock, "No tracklist loaded\n");
+						break;
+					}
 					if(strlen(val)) {
 						// if a value is given, always play that song!
 						i = atoi(val);
@@ -368,6 +397,10 @@ void* listener() {
 						state = IM_Playing;
 					break;
 				case NEXT:
+					if(num_tracks<1) {
+						sock_printf(cmd_sock, "No tracklist loaded\n");
+						break;
+					}
 					if(strlen(val)) i = atoi(val);
 					else i = 1;
 					if(i>0) {
@@ -380,6 +413,10 @@ void* listener() {
 					state = IM_Playing;
 					break;
 				case PREV:
+					if(num_tracks<1) {
+						sock_printf(cmd_sock, "No tracklist loaded\n");
+						break;
+					}
 					if(strlen(val)) i = atoi(val);
 					else i = 1;
 					if(i>0) {
@@ -398,6 +435,10 @@ void* listener() {
 					sock_printf(cmd_sock, "OK\n");
 					break;
 				case STATUS:
+					if(num_tracks<1) {
+						sock_printf(cmd_sock, "No tracklist loaded\n");
+						break;
+					}
 					sock_printf(cmd_sock, "Track (%d of %d): %s\nGenre: %s\nArtist: %s\nAlbum: %s\nTrack: [%d] %s\n",
 						cur_track, num_tracks, tracks[cur_track]->path,
 						tracks[cur_track]->genre,
@@ -406,6 +447,8 @@ void* listener() {
 						tracks[cur_track]->number, tracks[cur_track]->title);
 					break;
 				case SHRTSTAT:
+					if(num_tracks<1)
+						break;
 					sock_printf(cmd_sock, "%d\t%d\t%d\t%d\t%s\t%s\t%s\t%s\t%d\t%s\n",
 						cur_track, num_tracks,
 						state, rnd,
@@ -425,6 +468,10 @@ void* listener() {
 						sock_printf(cmd_sock, "bad value\n", cur_track, tracks[cur_track]->path);
 					break;
 				case LIST:
+					if(num_tracks<1) {
+						sock_printf(cmd_sock, "No tracklist loaded\n");
+						break;
+					}
 					for(i=0; i<num_tracks; i++)
 						sock_printf(cmd_sock, "%d:\t%s\n""\t[%s] (%s - %s - %d) %s\n",
 							i, tracks[i]->path,
@@ -445,6 +492,10 @@ void* listener() {
 							tracks[i]->title);
 					break;
 				case SETLIST:
+					if(num_tracks<1) {
+						sock_printf(cmd_sock, "No tracklist loaded\n");
+						break;
+					}
 					i = ii = iii = 0;
 					n = strlen(val);
 					if(playlist!=NULL)
@@ -478,8 +529,32 @@ void* listener() {
 					scout(SET,0);
 					break;
 				case SHOWLIST:
+					if(num_tracks<1) {
+						sock_printf(cmd_sock, "No tracklist loaded\n");
+						break;
+					}
 					for(i=0; i<num_pl_tracks; i++)
 						sock_printf(cmd_sock, "%d (%d): %s\n", i, playlist[i], tracks[playlist[i]]->title);
+					break;
+				case LOADLIST:
+						free(tracks);
+						free(playlist);
+						num_pl_tracks = num_tracks = 0;
+						i = strlen(val);
+						if(i>0) {
+							if(listfile)
+								free(listfile);
+							listfile = calloc(i+1, sizeof(char));
+							strncpy(listfile, val, i);
+							num_tracks = munchIn();
+							if(num_tracks>0)
+								sock_printf(cmd_sock, "yay, i munched %d lines\n", num_tracks);
+							else if(num_tracks==0)
+								sock_printf(cmd_sock, "awww, nothing found in your list\n");
+							else
+								sock_printf(cmd_sock, "awww, file not found %d\n", num_tracks);
+						} else
+							sock_printf(cmd_sock, "no file specified\n");
 					break;
 				default:
 					sock_printf(cmd_sock, "unknown command\n");
@@ -500,6 +575,9 @@ void* player() {
 	if(player_pid>=0)
 		die("Heile Welt at Sehbuehl Error: pid is already in use\n");
 
+	if(num_tracks<1)
+		return NULL;
+
 	pthread_mutex_lock(&lock);
 	player_pid = play(tracks[cur_track], &infp, &outfp);
 	pthread_mutex_unlock(&lock);
@@ -518,6 +596,7 @@ void* player() {
 
 int main(int argc, char *argv[]) {
 	pthread_t p_player, p_listener;
+    pid_t pid;
 	int i, l;
 
 
@@ -536,8 +615,9 @@ int main(int argc, char *argv[]) {
 			case 'f':
 				if(++i < argc) {
 					l = strlen(argv[i]);
-					listfile = calloc(sizeof(char), l);
+					listfile = calloc(sizeof(char), l+1);
 					strncpy(listfile, argv[i], l);
+					userlistprovided = 1;
 				} else
 					usage();
 				break;
@@ -546,20 +626,32 @@ int main(int argc, char *argv[]) {
 
 	if(listfile==NULL) {
 		l = strlen(getenv("XDG_CONFIG_HOME"));
-		listfile = calloc(sizeof(char), l+14);
-		snprintf(listfile, 256, "%s/madasul/list", getenv("XDG_CONFIG_HOME"));
+		listfile = calloc(sizeof(char), l+15);
+		snprintf(listfile, l+15, "%s/madasul/list", getenv("XDG_CONFIG_HOME"));
 	}
 
 	srandom((unsigned int)time(NULL));
 	num_tracks = munchIn();
-	printf("yay, i munched %d lines\n", num_tracks);
+	if(num_tracks>0)
+		printf("yay, i munched %d lines\n", num_tracks);
+	else if(num_tracks==0)
+		printf("awww, nothing found in your list\n");
+	else
+		printf("awww, file not found\n");
 	opensock();
 	printf("and my socket is open!\n");
+
+    pid = fork();
+
+    if(pid < 0)
+        die("There is no Fork in Zion Error: failed to fork\n");
+    else if (pid != 0)
+    	return 0;
 
 	pthread_mutex_init(&lock, NULL);
 
 	pthread_create(&p_listener, NULL, listener, NULL);
-	state = IM_Playing;
+	state = num_tracks>0 ? IM_Playing : IM_Stopped;
 	while(state>IM_Dying) {
 		if(state==IM_Playing) {
 			pthread_create(&p_player, NULL, player, NULL);
