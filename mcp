@@ -1,6 +1,3 @@
 #!/bin/bash
 
-s=$1
-shift
-
-echo "$@" | socat - tcp-connect:127.0.0.1:$s
+echo "$@" | socat - tcp-connect:127.0.0.1:6666
