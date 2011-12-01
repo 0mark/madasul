@@ -12,8 +12,17 @@
 #include <sys/wait.h>
 #include <stdarg.h>
 
-/* macros */
-#define LENGTH(X)          (sizeof X / sizeof X[0])
+
+/*  */
+#define ALLOC_ERR "Error: calloc failed\n"
+#define OPEN_FILE_ERR "Error: failed to open file %s\n"
+#define OPEN_SOCKET_ERR "Error: failed to socket %d\n"
+
+#define HANDLER_FORMAT_WARN "Warning: error in handler list in line %d\n"
+#define FTYPES_COUNT_WARN "Warning: too many filetypes\n"
+#define HANDLER_COUNT_WARN "Warning: too many handler\n"
+#define OPEN_FILE_WARN "Warning: failed to open file %s\n"
+#define LIB_LINE_FAIL_WARN "Warning: error reading line %d\n"
 
 #define READ               0
 #define WRITE              1
@@ -21,30 +30,39 @@
 #define BUF_SIZE           1024
 #define TRACKS_BUF_SIZE	   128
 
+
+/* macros */
+#define LENGTH(X)          (sizeof X / sizeof X[0])
+
+
 /* enums */
-enum { STOP, PAUSE, PLAYPAUSE, PLAY, NEXT, PREV, DIE, STATUS, SHRTSTAT, RND, LIST, SHRTLST, SETLIST, SHOWLIST, LOADLIST, CommandLast };
+enum { STOP, PAUSE, PLAYPAUSE, PLAY, NEXT, PREV, RANDOM,
+       DIE, STATUS, LOADHANDLER,
+       LOADLIB, SHOWLIB,
+       SETLIST, SHOWLIST,
+       SHRTSTAT, SHRTLIB, CommandLast };
 enum { INC, DEC, SET };
 enum { IM_Dying, IM_Stopped, IM_Paused, IM_Playing, StateLast };
 
 
 /* structs */
-typedef struct track {
-    int type;
-    char* path;
+typedef struct file_t {
+	int type;
+	char* path;
 	char* artist;
 	char* album;
 	char* title;
 	char* date;
 	char* genre;
 	unsigned int number;
-} track;
+} file_t;
 
-typedef struct handler {
+typedef struct handler_t {
 	char* executable;
 	int out;
-} handler;
+} handler_t;
 
-#include "config.h"
+//#include "config.h"
 
 /* function declarations */
 // helper
@@ -53,10 +71,11 @@ static void sock_printf(int cmd_sock, const char *format, ...);
 static void usage(void);
 // TODO: malloc wrapper
 // init
-static int munchIn();
+static int load_lib(char* file);
+static int load_handler(char* file);
 static int opensock();
 // worker
-static pid_t play(track* track, int* infp, int* outfp);
+static pid_t play(file_t* track, int* infp, int* outfp);
 static int get_cmd(int *cmd_sock, char *val);
 // player helper
 static void scout(unsigned int whatdo, unsigned int val);
@@ -66,23 +85,35 @@ static void* player();
 
 
 /* variables */
-// commands
-char* ctrl_cmds[]    = { "stop", "pause", "playpause", "play", "next", "prev", "die", "status", "shrtstat", "random", "tracklist", "shorttracklist", "setlist", "showlist", "loadlist" };
-static int socket_port     = 6666;
-track** tracks;        // Array of pointers to track structs.
+static int socket_port = 6666;
 int ctrl_sock = -1;
-int cur_track = 0;     // current track in track list
-int cur_pl_track = 0;  // current track in playlist or tracklist. Only used by scout!
-int num_tracks;
-int num_pl_tracks;
-int state = IM_Stopped;
-int userlistprovided = 0;
+
+file_t** library; // list of files, including metadata
+handler_t** handlers; // list of file handlers
+int* playlist = NULL;
+
+int cur_track = 0; // current track in library
+int cur_pl_track = 0; // current track in playlist
+int num_tracks; // number of tracks in playlist
+int num_pl_tracks; // number of tracks in playlist
+
+int state = IM_Stopped; // state, one of IM_Dying, IM_Stopped, IM_Paused, IM_Playing, StateLast
+int rnd = 0; // state of random
+
 pthread_mutex_t lock;
 pid_t player_pid = -1;
-int rnd = 0;
+
 static const int debug = 0;
-int* playlist = NULL;
-char *listfile = NULL;
+
+char** typenames; // list of strings naming file types (eg. ogg, mp3, ...)
+int* types; // for every typename a number, indicating the correspondig handler
+int num_types; // number of loaded file handlers
+
+char* ctrl_cmds[] = { "stop", "pause", "playpause", "play", "next", "prev", "random",
+                      "die", "status", "loadhandler",
+                      "loadlib", "showlib",
+                      "setlist", "showlist",
+                      "shrtstat", "shrtlib" }; // help, loadhandler, ...
 
 
 /* function definitions */
@@ -111,86 +142,171 @@ void usage() {
 	die("usage: madasul [-p port] [-f list file]\n");
 }
 
-int munchIn() {
-    FILE *f;
-    char type[10], path[BUF_SIZE], artist[BUF_SIZE], album[BUF_SIZE], title[BUF_SIZE], date[BUF_SIZE], genre[BUF_SIZE], number[BUF_SIZE];
-    int i = 0, j = 0, k, len, n;
+char *nxt(char c, char *s) {
+	char *b = s;
+	while(*b && *b!=c) b++;
+	if(b!=s && *b==c) {
+		*b = 0;
+		return ++b;
+	} else return NULL;
+}
 
-    if((tracks = calloc(sizeof(track*), TRACKS_BUF_SIZE)) == NULL)
-        die("Lost memory on Mars Error: failed to allocate some memory\n");
+int load_handler(char* file) {
+	FILE *f;
+	char *b, *s, *parts[3];
+	int hc = 0, tc = 0, len, i, l = 0, cont = 0;
 
-    if(!(f = fopen(listfile, "r"))) {
-        if(userlistprovided)
-        	die("[TODO: find puny punch line!]: failed to open file %s\n", listfile);
-        else return -1;
-    }
+	if((b = calloc(sizeof(char), BUF_SIZE)) == NULL)
+		die(ALLOC_ERR);
 
-    while(!feof(f)) {
-		n = fscanf(f, "%10[^\t]\t%1023[^\t]\t%1023[^\t]\t%1023[^\t]\t%1023[^\t]\t%1023[^\t]\t%1023[^\t]\t%1023[^\n]\n", type, path, artist, album, title, date, genre, number);
-		if(n!=2 && n!=8) {
-			printf("Runaway Indian in the prairie of Spain Error: failed to read track line %d\n", i);
+	if((typenames = calloc(sizeof(char*), TRACKS_BUF_SIZE)) == NULL)
+		die(ALLOC_ERR);
+
+	if((types = calloc(sizeof(int), TRACKS_BUF_SIZE)) == NULL)
+		die(ALLOC_ERR);
+
+	if((handlers = calloc(sizeof(handler_t*), TRACKS_BUF_SIZE)) == NULL)
+		die(ALLOC_ERR);
+    
+	if(!(f = fopen(file, "r"))) {
+		return -1;
+	}
+
+	while(!feof(f)) {
+		fgets(b, BUF_SIZE, f);
+		l++;
+		if(*b == '#' || *b=='\n' || !*b) continue;
+
+		// split string
+		for(i = 0; i<3; i++) {
+			parts[i] = b;
+			if(!(b=nxt(i==2?'\n':',', b))) {
+				printf(HANDLER_FORMAT_WARN, l);
+				cont = 1;
+				break;
+			}
+		}
+		if(cont) {
+			cont = 0;
 			continue;
 		}
 
-        if((tracks[i] = calloc(sizeof(track), /*len + */1)) == NULL)
-	        die("Lost memory on Mars Error: failed to allocate some memory\n");
-
-        len = strlen(path);
-        if((tracks[i]->path = calloc(sizeof(char), len+1)) == NULL)
-	        die("Lost memory on Mars Error: failed to allocate some memory\n");
-        strncpy(tracks[i]->path, path, len);
-
-        for(k=0; k<LENGTH(typenames); k++)
-            if(strncmp(type, typenames[k], LENGTH(typenames[k]) || strncmp("*", typenames[k], 1))==0)
-                tracks[i]->type = types[k];
-
-		if(n==8) {
-			len = strlen(artist);
-			if((tracks[i]->artist = calloc(sizeof(char), len + 1)) == NULL)
-				die("Lost memory on Mars Error: failed to allocate some memory\n");
-	        strncpy(tracks[i]->artist, artist, len);
-			len = strlen(album);
-			if((tracks[i]->album = calloc(sizeof(char), len + 1)) == NULL)
-				die("Lost memory on Mars Error: failed to allocate some memory\n");
-	        strncpy(tracks[i]->album, album, len);
-			len = strlen(title);
-			if((tracks[i]->title = calloc(sizeof(char), len + 1)) == NULL)
-				die("Lost memory on Mars Error: failed to allocate some memory\n");
-	        strncpy(tracks[i]->title, title, len);
-			len = strlen(date);
-			if((tracks[i]->date = calloc(sizeof(char), len + 1)) == NULL)
-				die("Lost memory on Mars Error: failed to allocate some memory\n");
-	        strncpy(tracks[i]->date, date, len);
-			len = strlen(genre);
-			if((tracks[i]->genre = calloc(sizeof(char), len + 1)) == NULL)
-				die("Lost memory on Mars Error: failed to allocate some memory\n");
-	        strncpy(tracks[i]->genre, genre, len);
-			tracks[i]->number = atoi(number);
-		} else {
-			tracks[i]->artist = NULL;
-			tracks[i]->album = NULL;
-			tracks[i]->title = NULL;
-			tracks[i]->date = NULL;
-			tracks[i]->genre = NULL;
-			tracks[i]->number = 0;
+		// typenames
+		b = parts[0];
+		i = 1;
+		while(i) {
+			s = b;
+			while(*b && *b!=' ') b++;
+			if(!*b) i = 0;
+			*b = 0;
+			len = strlen(s);
+			if((typenames[tc] = calloc(sizeof(char), len)) == NULL)
+				die(ALLOC_ERR);
+			strncpy(typenames[tc], s, len);
+			types[tc] = hc;
+			b++;
+			tc++;
+			if(tc>TRACKS_BUF_SIZE) {
+				printf(FTYPES_COUNT_WARN);
+				return tc;
+			}
 		}
+
+		if((handlers[hc] = calloc(sizeof(handler_t), 1)) == NULL)
+		    die(ALLOC_ERR);
+
+		// output
+		handlers[hc]->out = atoi(parts[1]);
+
+		// executable
+		len = strlen(parts[2]);
+		if((handlers[hc]->executable = calloc(sizeof(char), len)) == NULL)
+		    die(ALLOC_ERR);
+		strncpy(handlers[hc]->executable, parts[2], len);
+
+		hc++;
+		if(hc>TRACKS_BUF_SIZE) {
+			printf(HANDLER_COUNT_WARN);
+			return tc;
+		}
+	}
+
+	return tc;
+}
+
+int load_lib(char* file) {
+    FILE *f;
+    char *buf, *bufs[8], *b, *c;
+    int i = 0, j = 0, l = 0, k, len, n;
+
+    if((buf = calloc(sizeof(char), BUF_SIZE)) == NULL)
+        die(ALLOC_ERR);
+
+    if((library = calloc(sizeof(file_t*), TRACKS_BUF_SIZE)) == NULL)
+        die(ALLOC_ERR);
+
+    if(!(f = fopen(file, "r"))) {
+		return -1;
+    }
+
+    while(!feof(f) && !ferror(f)) {
+    	fgets(buf, BUF_SIZE, f);
+		l++;
+		n = 0;
+		b = strtok(buf, "\t");
+		while(b!=NULL && n<8) {
+			bufs[n++] = b;
+			b = strtok(NULL, "\t");
+		}
+
+		if(n<2) {
+			printf(LIB_LINE_FAIL_WARN, l);
+			continue;
+		}
+
+        if((library[i]=calloc(sizeof(file_t), 1)) == NULL)
+	        die(ALLOC_ERR);
+
+        for(k=0; k<num_types; k++) {
+            if(strncmp(bufs[0], typenames[k], strlen(typenames[k]))==0 || strncmp("*", typenames[k], 1)==0) {
+                library[i]->type = types[k];
+            }
+        }
+
+		for(k=1; n-k>0 && k<7; k++) {
+			len = strlen(bufs[k]);
+			if((c = calloc(sizeof(char), len + 1)) == NULL)
+				die(ALLOC_ERR);
+			strncpy(c, bufs[k], len);
+			switch(k) { // TODO: i do not want this switch!
+				case 1:	library[i]->path=c; break;
+				case 2:	library[i]->artist=c; break;
+				case 3:	library[i]->album=c; break;
+				case 4:	library[i]->title=c; break;
+				case 5:	library[i]->date=c; break;
+				case 6:	library[i]->genre=c; break;
+			}
+		}
+		if(n==7)
+			library[i]->number = atoi(bufs[7]);
 
         i++;
         j++;
         if(j>=TRACKS_BUF_SIZE) {
-            track **tmp = tracks;
-            if((tracks = calloc(sizeof(track*), i + TRACKS_BUF_SIZE - 1)) == NULL)
-		        die("Lost memory on Mars Error: failed to allocate some memory\n");
-            memcpy(tracks, tmp, (i)*sizeof(track*));
+            file_t **tmp = library;
+            if((library = calloc(sizeof(file_t*), i + TRACKS_BUF_SIZE - 1)) == NULL)
+		        die(ALLOC_ERR);
+            memcpy(library, tmp, (i)*sizeof(file_t*));
             j = 0;
         }
     }
 
-    if(ferror(f)) {
-        free(tracks);
+    /*if(ferror(f)) {
+        free(library);
 		die("[TODO: find another punchline]: failed to read from file\n");
         return -1;
-    }
+    }*/
+
     fclose(f);
 
     return i;
@@ -202,7 +318,7 @@ int opensock() { // TODO: clean up
     //struct hostent *server;
 
     if((ctrl_sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-        die("Bare feet in Nakatomi Tower Error: failed to open socket.\n");
+        die(OPEN_SOCKET_ERR, socket_port);
 
 	//flags = fcntl(ctrl_sock, F_GETFL, 0);
 	//fcntl(ctrl_sock, SO_REUSEADDR, 0);
@@ -229,7 +345,7 @@ int opensock() { // TODO: clean up
     return(1);
 }
 
-pid_t play(track* track, int* infp, int* outfp) {
+pid_t play(file_t* track, int* infp, int* outfp) {
     int p_stdin[2], p_stdout[2], type = track->type;
     pid_t pid;
 	static char pbuf[BUF_SIZE], spbuf[BUF_SIZE];
@@ -247,18 +363,18 @@ pid_t play(track* track, int* infp, int* outfp) {
         close(p_stdin[WRITE]);
         dup2(p_stdin[READ], READ);
         close(p_stdout[READ]);
-        dup2(p_stdout[WRITE], handlers[type].out);
-		strncpy(pbuf, handlers[type].executable, BUF_SIZE);
+        dup2(p_stdout[WRITE], handlers[type]->out);
+		strncpy(pbuf, handlers[type]->executable, BUF_SIZE);
 
 		p = strtok(pbuf," ");
 		while(p!=NULL && i<15) {
 	        snprintf(spbuf, BUF_SIZE, p, track->path);
 			ps[i] = calloc(strlen(spbuf)+1, sizeof(char));
 			strncpy(ps[i++], spbuf, strlen(spbuf));
+printf("::%d:: :%s:\n",i, spbuf);
 			p = strtok(NULL, " ,");
 		}
 		ps[i] = NULL;
-
 		execvp(ps[0], ps);
         // we should not be here, it means the exec did not work...
 		die("[TODO]: failed to exec\n");
@@ -286,14 +402,14 @@ int get_cmd(int *cmd_sock, char *val) {
 
 	clilen = sizeof(cli_addr);
 	if((*cmd_sock = accept(ctrl_sock, (struct sockaddr *)&cli_addr, &clilen)) < 0)
-		die("Bare feet in Nakatomi Tower Error: failed to open a socket to listen\n");
+		die(OPEN_SOCKET_ERR, socket_port);
 	*buf = 0;
 	n = read(*cmd_sock, buf, BUF_SIZE);
 	buf[n] = 0;
 	*val = 0;
 
 	if(debug)
-		printf("command: %s\n", buf);
+		printf("command line: %s\n", buf);
 
 	if(n>0) {
 		for(i=0; i<LENGTH(ctrl_cmds); i++) {
@@ -308,6 +424,9 @@ int get_cmd(int *cmd_sock, char *val) {
 			val[n-len-2] = 0;
 		}
 	}
+
+	if(debug)
+		printf("command: %d\n", cmd);
 
 	return cmd;
 }
@@ -357,7 +476,8 @@ void* listener() {
 					sock_printf(cmd_sock, "OK\n");
 					break;
 				case PAUSE:
-					if(state>IM_Stopped && player_pid>0) {// Just to never come to kill(0) or stuff...
+					// Just to make sure to never commit a kill(0) or stuff...
+					if(state>IM_Stopped && player_pid>0) {
 						if(state>IM_Paused) {
 							kill(player_pid, 19);
 							state = IM_Paused;
@@ -375,7 +495,7 @@ void* listener() {
 					}
 				case PLAY:
 					if(num_tracks<1) {
-						sock_printf(cmd_sock, "No tracklist loaded\n");
+						sock_printf(cmd_sock, "No library loaded\n");
 						break;
 					}
 					if(strlen(val)) {
@@ -440,11 +560,28 @@ void* listener() {
 						break;
 					}
 					sock_printf(cmd_sock, "Track (%d of %d): %s\nGenre: %s\nArtist: %s\nAlbum: %s\nTrack: [%d] %s\n",
-						cur_track, num_tracks, tracks[cur_track]->path,
-						tracks[cur_track]->genre,
-						tracks[cur_track]->artist,
-						tracks[cur_track]->album,
-						tracks[cur_track]->number, tracks[cur_track]->title);
+						cur_track, num_tracks, library[cur_track]->path,
+						library[cur_track]->genre,
+						library[cur_track]->artist,
+						library[cur_track]->album,
+						library[cur_track]->number, library[cur_track]->title);
+					break;
+				case LOADHANDLER:
+						free(handlers);
+						free(typenames);
+						free(types);
+						num_types = 0;
+						i = strlen(val);
+						if(i>0) {
+							num_types = load_handler(val);
+							if(num_types>0)
+								sock_printf(cmd_sock, "Loaded %d file handlers.\n", num_types);
+							else if(num_types==0)
+								sock_printf(cmd_sock, "No valid file handlers found.\n");
+							else
+								sock_printf(cmd_sock, "File not found\n");
+						} else
+							sock_printf(cmd_sock, "No file specified\n");
 					break;
 				case SHRTSTAT:
 					if(num_tracks<1)
@@ -452,44 +589,44 @@ void* listener() {
 					sock_printf(cmd_sock, "%d\t%d\t%d\t%d\t%s\t%s\t%s\t%s\t%d\t%s\n",
 						cur_track, num_tracks,
 						state, rnd,
-						tracks[cur_track]->path,
-						tracks[cur_track]->genre,
-						tracks[cur_track]->artist,
-						tracks[cur_track]->album,
-						tracks[cur_track]->number, tracks[cur_track]->title);
+						library[cur_track]->path,
+						library[cur_track]->genre,
+						library[cur_track]->artist,
+						library[cur_track]->album,
+						library[cur_track]->number, library[cur_track]->title);
 					break;
-				case RND:
+				case RANDOM:
 					if(strlen(val)) i = atoi(val);
 					else i = !rnd;
 					if(i>=0 && i<=1) {
 						rnd = i;
-						sock_printf(cmd_sock, "OK\n", cur_track, tracks[cur_track]->path);
+						sock_printf(cmd_sock, "OK\n", cur_track, library[cur_track]->path);
 					} else
-						sock_printf(cmd_sock, "bad value\n", cur_track, tracks[cur_track]->path);
+						sock_printf(cmd_sock, "bad value\n", cur_track, library[cur_track]->path);
 					break;
-				case LIST:
+				case SHOWLIB:
 					if(num_tracks<1) {
 						sock_printf(cmd_sock, "No tracklist loaded\n");
 						break;
 					}
 					for(i=0; i<num_tracks; i++)
 						sock_printf(cmd_sock, "%d:\t%s\n""\t[%s] (%s - %s - %d) %s\n",
-							i, tracks[i]->path,
-							tracks[i]->genre,
-							tracks[i]->artist,
-							tracks[i]->album,
-							tracks[i]->number,
-							tracks[i]->title);
+							i, library[i]->path,
+							library[i]->genre,
+							library[i]->artist,
+							library[i]->album,
+							library[i]->number,
+							library[i]->title);
 					break;
-				case SHRTLST:
+				case SHRTLIB:
 					for(i=0; i<num_tracks; i++)
 						sock_printf(cmd_sock, "%d\t%s\t%s\t%s\t%s\t%d\t%s\t\n",
-							i, tracks[i]->path,
-							tracks[i]->genre,
-							tracks[i]->artist,
-							tracks[i]->album,
-							tracks[i]->number,
-							tracks[i]->title);
+							i, library[i]->path,
+							library[i]->genre,
+							library[i]->artist,
+							library[i]->album,
+							library[i]->number,
+							library[i]->title);
 					break;
 				case SETLIST:
 					if(num_tracks<1) {
@@ -534,25 +671,29 @@ void* listener() {
 						break;
 					}
 					for(i=0; i<num_pl_tracks; i++)
-						sock_printf(cmd_sock, "%d (%d): %s\n", i, playlist[i], tracks[playlist[i]]->title);
+						sock_printf(cmd_sock, "%d (%d): %s\n", i, playlist[i], library[playlist[i]]->title);
 					break;
-				case LOADLIST:
-						free(tracks);
+				case LOADLIB:
+					if(num_types<1) {
+						sock_printf(cmd_sock, "No file handlers loaded\n");
+						break;
+					}
+						free(library);
 						free(playlist);
 						num_pl_tracks = num_tracks = 0;
 						i = strlen(val);
 						if(i>0) {
-							if(listfile)
-								free(listfile);
-							listfile = calloc(i+1, sizeof(char));
-							strncpy(listfile, val, i);
-							num_tracks = munchIn();
+							//if(listfile)
+							//	free(listfile);
+							//listfile = calloc(i+1, sizeof(char));
+							//strncpy(listfile, val, i);
+							num_tracks = load_lib(val);
 							if(num_tracks>0)
 								sock_printf(cmd_sock, "yay, i munched %d lines\n", num_tracks);
 							else if(num_tracks==0)
 								sock_printf(cmd_sock, "awww, nothing found in your list\n");
 							else
-								sock_printf(cmd_sock, "awww, file not found %d\n", num_tracks);
+								sock_printf(cmd_sock, "awww, file not found\n");
 						} else
 							sock_printf(cmd_sock, "no file specified\n");
 					break;
@@ -579,7 +720,7 @@ void* player() {
 		return NULL;
 
 	pthread_mutex_lock(&lock);
-	player_pid = play(tracks[cur_track], &infp, &outfp);
+	player_pid = play(library[cur_track], &infp, &outfp);
 	pthread_mutex_unlock(&lock);
 
 	waitpid(player_pid, &stat, 0);
@@ -596,7 +737,8 @@ void* player() {
 
 int main(int argc, char *argv[]) {
 	pthread_t p_player, p_listener;
-    pid_t pid;
+	pid_t pid;
+	char *listfile = NULL, *handlerfile = NULL, *listpath = "%s/madasul/list", *handlerpath = "%s/madasul/handler";
 	int i, l;
 
 
@@ -614,48 +756,62 @@ int main(int argc, char *argv[]) {
 				break;
 			case 'f':
 				if(++i < argc) {
-					l = strlen(argv[i]);
-					listfile = calloc(sizeof(char), l+1);
-					strncpy(listfile, argv[i], l);
-					userlistprovided = 1;
+					listfile = argv[i];
+				} else
+					usage();
+				break;
+			case 'm':
+				if(++i < argc) {
+					handlerfile = argv[i];
 				} else
 					usage();
 				break;
 		}
 	}
 
-	if(listfile==NULL) {
-		l = strlen(getenv("XDG_CONFIG_HOME"));
-		listfile = calloc(sizeof(char), l+15);
-		snprintf(listfile, l+15, "%s/madasul/list", getenv("XDG_CONFIG_HOME"));
+	if(handlerfile==NULL) {
+		l = strlen(getenv("XDG_CONFIG_HOME")) + strlen(handlerpath);
+		handlerfile = calloc(sizeof(char), l);
+		snprintf(handlerfile, l, handlerpath, getenv("XDG_CONFIG_HOME"));
+		num_types = load_handler(handlerfile);
+	} else {
+		if((num_types=load_handler(handlerfile))<0)
+			die(OPEN_FILE_ERR, handlerfile);
 	}
+	if(num_types>=0) printf("loaded %d file type handler\n", num_types);
+
+	if(listfile==NULL) {
+		l = strlen(getenv("XDG_CONFIG_HOME")) + strlen(listpath);
+		listfile = calloc(sizeof(char), l);
+		snprintf(listfile, l, listpath, getenv("XDG_CONFIG_HOME"));
+		num_tracks = load_lib(listfile);
+	} else {
+		if((num_tracks=load_lib(listfile))<0)
+			die(OPEN_FILE_ERR, listfile);
+	}
+	if(num_tracks>=0) printf("loaded %d files from list\n", num_tracks);
 
 	srandom((unsigned int)time(NULL));
-	num_tracks = munchIn();
-	if(num_tracks>0)
-		printf("yay, i munched %d lines\n", num_tracks);
-	else if(num_tracks==0)
-		printf("awww, nothing found in your list\n");
-	else
-		printf("awww, file not found\n");
+
 	opensock();
-	printf("and my socket is open!\n");
+	printf("Listening on Socket %d.\n", socket_port);
 
-    pid = fork();
-
+    /*pid = fork();
     if(pid < 0)
         die("There is no Fork in Zion Error: failed to fork\n");
-    else if (pid != 0)
+    else if(pid != 0) {
+    	printf("forked to pid %d\n", pid);
     	return 0;
+    }*/
 
 	pthread_mutex_init(&lock, NULL);
-
 	pthread_create(&p_listener, NULL, listener, NULL);
+
 	state = num_tracks>0 ? IM_Playing : IM_Stopped;
 	while(state>IM_Dying) {
 		if(state==IM_Playing) {
 			pthread_create(&p_player, NULL, player, NULL);
-			pthread_join(p_player, NULL);
+			pthread_join(p_player, NULL); // waits for player to stop...
 		}
 		sleep(1); // Stop going crazy option
 	}
