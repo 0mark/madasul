@@ -32,7 +32,10 @@
 
 
 /* macros */
-#define LENGTH(X)          (sizeof X / sizeof X[0])
+#define LENGTH(X)                  (sizeof X / sizeof X[0])
+#define NEED_LIB(cmd)              (cmd==PLAYPAUSE || cmd==PLAY || cmd==NEXT || cmd==PREV || cmd==STATUS || cmd==SHRTSTAT || cmd==SHOWLIB || cmd==SHRTLIB || cmd==SETLIST || cmd==SHOWLIST)
+#define STOPPLAYER                 if(player_pid>0) kill(player_pid, SIGKILL);
+#define XALLOC(target, type, size) if((target = calloc(sizeof(type), size)) == NULL) die(ALLOC_ERR)
 
 
 /* enums */
@@ -139,7 +142,7 @@ void sock_printf(int cmd_sock, const char *format, ...) {
 
 void usage() {
 	fputs("madasul - evil media daemon\n", stderr);
-	die("usage: madasul [-p port] [-f list file]\n");
+	die("usage: madasul [-p port] [-f library file] [-h handler file]\n");
 }
 
 char *nxt(char c, char *s) {
@@ -156,17 +159,10 @@ int load_handler(char* file) {
 	char *b, *s, *parts[3];
 	int hc = 0, tc = 0, len, i, l = 0, cont = 0;
 
-	if((b = calloc(sizeof(char), BUF_SIZE)) == NULL)
-		die(ALLOC_ERR);
-
-	if((typenames = calloc(sizeof(char*), TRACKS_BUF_SIZE)) == NULL)
-		die(ALLOC_ERR);
-
-	if((types = calloc(sizeof(int), TRACKS_BUF_SIZE)) == NULL)
-		die(ALLOC_ERR);
-
-	if((handlers = calloc(sizeof(handler_t*), TRACKS_BUF_SIZE)) == NULL)
-		die(ALLOC_ERR);
+	XALLOC(b, char, BUF_SIZE);
+	XALLOC(typenames, char, TRACKS_BUF_SIZE);
+	XALLOC(types, char, TRACKS_BUF_SIZE);
+	XALLOC(handlers, handler_t, TRACKS_BUF_SIZE);
     
 	if(!(f = fopen(file, "r"))) {
 		return -1;
@@ -200,8 +196,7 @@ int load_handler(char* file) {
 			if(!*b) i = 0;
 			*b = 0;
 			len = strlen(s);
-			if((typenames[tc] = calloc(sizeof(char), len)) == NULL)
-				die(ALLOC_ERR);
+			XALLOC(typenames[tc], char, len);
 			strncpy(typenames[tc], s, len);
 			types[tc] = hc;
 			b++;
@@ -212,16 +207,14 @@ int load_handler(char* file) {
 			}
 		}
 
-		if((handlers[hc] = calloc(sizeof(handler_t), 1)) == NULL)
-		    die(ALLOC_ERR);
+		XALLOC(handlers[hc], handler_t, 1);
 
 		// output
 		handlers[hc]->out = atoi(parts[1]);
 
 		// executable
 		len = strlen(parts[2]);
-		if((handlers[hc]->executable = calloc(sizeof(char), len)) == NULL)
-		    die(ALLOC_ERR);
+		XALLOC(handlers[hc]->executable, char, len);
 		strncpy(handlers[hc]->executable, parts[2], len);
 
 		hc++;
@@ -239,11 +232,8 @@ int load_lib(char* file) {
     char *buf, *bufs[8], *b, *c;
     int i = 0, j = 0, l = 0, k, len, n;
 
-    if((buf = calloc(sizeof(char), BUF_SIZE)) == NULL)
-        die(ALLOC_ERR);
-
-    if((library = calloc(sizeof(file_t*), TRACKS_BUF_SIZE)) == NULL)
-        die(ALLOC_ERR);
+    XALLOC(buf, char, BUF_SIZE);
+	XALLOC(library, file_t, TRACKS_BUF_SIZE);
 
     if(!(f = fopen(file, "r"))) {
 		return -1;
@@ -264,8 +254,7 @@ int load_lib(char* file) {
 			continue;
 		}
 
-        if((library[i]=calloc(sizeof(file_t), 1)) == NULL)
-	        die(ALLOC_ERR);
+        XALLOC(library[i], file_t, 1);
 
         for(k=0; k<num_types; k++) {
             if(strncmp(bufs[0], typenames[k], strlen(typenames[k]))==0 || strncmp("*", typenames[k], 1)==0) {
@@ -275,8 +264,7 @@ int load_lib(char* file) {
 
 		for(k=1; n-k>0 && k<7; k++) {
 			len = strlen(bufs[k]);
-			if((c = calloc(sizeof(char), len + 1)) == NULL)
-				die(ALLOC_ERR);
+			XALLOC(c, char, len + 1);
 			strncpy(c, bufs[k], len);
 			switch(k) { // TODO: i do not want this switch!
 				case 1:	library[i]->path=c; break;
@@ -294,8 +282,7 @@ int load_lib(char* file) {
         j++;
         if(j>=TRACKS_BUF_SIZE) {
             file_t **tmp = library;
-            if((library = calloc(sizeof(file_t*), i + TRACKS_BUF_SIZE - 1)) == NULL)
-		        die(ALLOC_ERR);
+            XALLOC(library, file_t, i + TRACKS_BUF_SIZE - 1);
             memcpy(library, tmp, (i)*sizeof(file_t*));
             j = 0;
         }
@@ -339,7 +326,7 @@ int opensock() { // TODO: clean up
 */
 
     if(bind(ctrl_sock, (struct sockaddr *)&sain, len)<0)
-        die("Bare feet in Nakatomi Tower Error: failed to bind socket.\n");
+        die("Error: failed to bind socket.\n");
 
 	listen(ctrl_sock, 5);
     return(1);
@@ -353,12 +340,12 @@ pid_t play(file_t* track, int* infp, int* outfp) {
 	int i = 0;
 
     if(pipe(p_stdin) != 0 || pipe(p_stdout) != 0)
-        die("No Pizza in the Sewer Error: failed to open pipe\n");
+        die("Error: failed to open pipe\n");
 
     pid = fork();
 
     if(pid < 0)
-        die("There is no Fork in Zion Error: failed to fork\n");
+        die("Error: failed to fork\n");
     else if (pid == 0) { //
         close(p_stdin[WRITE]);
         dup2(p_stdin[READ], READ);
@@ -369,9 +356,10 @@ pid_t play(file_t* track, int* infp, int* outfp) {
 		p = strtok(pbuf," ");
 		while(p!=NULL && i<15) {
 	        snprintf(spbuf, BUF_SIZE, p, track->path);
-			ps[i] = calloc(strlen(spbuf)+1, sizeof(char));
+			// TODO: I gues its not wise to alloc it again and again without ever freeing it!
+			XALLOC(ps[i], char, strlen(spbuf)+1);
+			//ps[i] = calloc(strlen(spbuf)+1, sizeof(char));
 			strncpy(ps[i++], spbuf, strlen(spbuf));
-printf("::%d:: :%s:\n",i, spbuf);
 			p = strtok(NULL, " ,");
 		}
 		ps[i] = NULL;
@@ -468,15 +456,18 @@ void* listener() {
 
 	while(1) {
 		if((cmd=get_cmd(&cmd_sock, val))>=0) {
+			
+			if(NEED_LIB(cmd) && num_tracks<1) {
+				sock_printf(cmd_sock, "No files in library\n");
+				continue;
+			}
 			switch(cmd) {
 				case STOP:
-					if(player_pid>0)
-						kill(player_pid, SIGKILL);
+					STOPPLAYER
 					state = IM_Stopped;
 					sock_printf(cmd_sock, "OK\n");
 					break;
 				case PAUSE:
-					// Just to make sure to never commit a kill(0) or stuff...
 					if(state>IM_Stopped && player_pid>0) {
 						if(state>IM_Paused) {
 							kill(player_pid, 19);
@@ -489,82 +480,52 @@ void* listener() {
 					sock_printf(cmd_sock, "OK\n");
 					break;
 				case PLAYPAUSE:
-					if(player_pid>0 && state>IM_Paused && !strlen(val)) {
+					if(player_pid>0 && state>IM_Paused && !strlen(val) && num_tracks>0) {
 						kill(player_pid, 19);
+						// Undefined State
 						state = StateLast;
 					}
 				case PLAY:
 					if(num_tracks<1) {
-						sock_printf(cmd_sock, "No library loaded\n");
-						break;
 					}
 					if(strlen(val)) {
 						// if a value is given, always play that song!
 						i = atoi(val);
-						if(player_pid>0)
-							kill(player_pid, SIGKILL);
+						STOPPLAYER
 						scout(SET, i);
-						sock_printf(cmd_sock, "OK\n");
 					}
-					// unpause if no value is given
+					// unpause
 					if(state==IM_Paused && player_pid>0) {
 						kill(player_pid, 18);
 						state = IM_Playing;
 					} else if(state==StateLast)
 						state = IM_Paused;
-					// always set state running, resumes from stop
+					// set state running when not paused (resume from stop)
 					if(state<IM_Paused)
 						state = IM_Playing;
+					sock_printf(cmd_sock, "OK\n");
 					break;
 				case NEXT:
-					if(num_tracks<1) {
-						sock_printf(cmd_sock, "No tracklist loaded\n");
-						break;
-					}
-					if(strlen(val)) i = atoi(val);
-					else i = 1;
-					if(i>0) {
-						if(player_pid>0)
-							kill(player_pid, SIGKILL);
-						scout(INC, i);
-						sock_printf(cmd_sock, "OK\n");
-					} else
-						sock_printf(cmd_sock, "bad value\n");
-					state = IM_Playing;
-					break;
 				case PREV:
-					if(num_tracks<1) {
-						sock_printf(cmd_sock, "No tracklist loaded\n");
-						break;
-					}
 					if(strlen(val)) i = atoi(val);
 					else i = 1;
-					if(i>0) {
-						if(player_pid>0)
-							kill(player_pid, SIGKILL);
-						scout(DEC, i);
-						sock_printf(cmd_sock, "OK\n");
-					} else
-						sock_printf(cmd_sock, "bad value\n");
+					STOPPLAYER
+					scout(cmd==NEXT?INC:DEC, i);
+					sock_printf(cmd_sock, "OK\n");
 					state = IM_Playing;
 					break;
 				case DIE:
-					if(player_pid>0)
-						kill(player_pid, SIGKILL);
-					state = IM_Playing;
+					STOPPLAYER
+					state = IM_Dying;
 					sock_printf(cmd_sock, "OK\n");
 					break;
 				case STATUS:
-					if(num_tracks<1) {
-						sock_printf(cmd_sock, "No tracklist loaded\n");
-						break;
-					}
 					sock_printf(cmd_sock, "Track (%d of %d): %s\nGenre: %s\nArtist: %s\nAlbum: %s\nTrack: [%d] %s\n",
-						cur_track, num_tracks, library[cur_track]->path,
-						library[cur_track]->genre,
-						library[cur_track]->artist,
-						library[cur_track]->album,
-						library[cur_track]->number, library[cur_track]->title);
+                                          cur_track, num_tracks, library[cur_track]->path,
+					                      library[cur_track]->genre,
+					                      library[cur_track]->artist,
+					                      library[cur_track]->album,
+					                      library[cur_track]->number, library[cur_track]->title);
 					break;
 				case LOADHANDLER:
 						free(handlers);
@@ -605,10 +566,6 @@ void* listener() {
 						sock_printf(cmd_sock, "bad value\n", cur_track, library[cur_track]->path);
 					break;
 				case SHOWLIB:
-					if(num_tracks<1) {
-						sock_printf(cmd_sock, "No tracklist loaded\n");
-						break;
-					}
 					for(i=0; i<num_tracks; i++)
 						sock_printf(cmd_sock, "%d:\t%s\n""\t[%s] (%s - %s - %d) %s\n",
 							i, library[i]->path,
@@ -629,15 +586,11 @@ void* listener() {
 							library[i]->title);
 					break;
 				case SETLIST:
-					if(num_tracks<1) {
-						sock_printf(cmd_sock, "No tracklist loaded\n");
-						break;
-					}
 					i = ii = iii = 0;
 					n = strlen(val);
 					if(playlist!=NULL)
 						free(playlist);
-					playlist = calloc(sizeof(int), TRACKS_BUF_SIZE);
+					XALLOC(playlist, int, TRACKS_BUF_SIZE);
 					do {
 						buf = val;
 						while(*buf!=0) {
@@ -654,9 +607,10 @@ void* listener() {
 								if(i<20)
 									abuf[i++] = *buf;
 								else {
-									sock_printf(cmd_sock, "invalid list\n");
+									sock_printf(cmd_sock, "Invalid list\n");
 									close(cmd_sock);
-									return NULL; // TODO: Is this a good idea?
+									//return NULL; // TODO: Is this a good idea?
+									break;
 								}
 							}
 							buf++;
@@ -666,10 +620,6 @@ void* listener() {
 					scout(SET,0);
 					break;
 				case SHOWLIST:
-					if(num_tracks<1) {
-						sock_printf(cmd_sock, "No tracklist loaded\n");
-						break;
-					}
 					for(i=0; i<num_pl_tracks; i++)
 						sock_printf(cmd_sock, "%d (%d): %s\n", i, playlist[i], library[playlist[i]]->title);
 					break;
@@ -678,24 +628,20 @@ void* listener() {
 						sock_printf(cmd_sock, "No file handlers loaded\n");
 						break;
 					}
-						free(library);
-						free(playlist);
-						num_pl_tracks = num_tracks = 0;
-						i = strlen(val);
-						if(i>0) {
-							//if(listfile)
-							//	free(listfile);
-							//listfile = calloc(i+1, sizeof(char));
-							//strncpy(listfile, val, i);
-							num_tracks = load_lib(val);
-							if(num_tracks>0)
-								sock_printf(cmd_sock, "yay, i munched %d lines\n", num_tracks);
-							else if(num_tracks==0)
-								sock_printf(cmd_sock, "awww, nothing found in your list\n");
-							else
-								sock_printf(cmd_sock, "awww, file not found\n");
-						} else
-							sock_printf(cmd_sock, "no file specified\n");
+					free(library);
+					free(playlist);
+					num_pl_tracks = num_tracks = 0;
+					i = strlen(val);
+					if(i>0) {
+						num_tracks = load_lib(val);
+						if(num_tracks>0)
+							sock_printf(cmd_sock, "Loaded %d files to library\n", num_tracks);
+						else if(num_tracks==0)
+							sock_printf(cmd_sock, "Empty File\n");
+						else
+							sock_printf(cmd_sock, "File not found\n");
+					} else
+						sock_printf(cmd_sock, "No file specified\n");
 					break;
 				default:
 					sock_printf(cmd_sock, "unknown command\n");
@@ -711,10 +657,10 @@ void* listener() {
 }
 
 void* player() {
-    int infp, /*w, */outfp, stat;
+    int infp, outfp, stat;
 
 	if(player_pid>=0)
-		die("Heile Welt at Sehbuehl Error: pid is already in use\n");
+		die("Error: pid is already in use\n");
 
 	if(num_tracks<1)
 		return NULL;
@@ -760,7 +706,7 @@ int main(int argc, char *argv[]) {
 				} else
 					usage();
 				break;
-			case 'm':
+			case 'h':
 				if(++i < argc) {
 					handlerfile = argv[i];
 				} else
@@ -771,7 +717,7 @@ int main(int argc, char *argv[]) {
 
 	if(handlerfile==NULL) {
 		l = strlen(getenv("XDG_CONFIG_HOME")) + strlen(handlerpath);
-		handlerfile = calloc(sizeof(char), l);
+		XALLOC(handlerfile, char, l);
 		snprintf(handlerfile, l, handlerpath, getenv("XDG_CONFIG_HOME"));
 		num_types = load_handler(handlerfile);
 	} else {
@@ -782,7 +728,7 @@ int main(int argc, char *argv[]) {
 
 	if(listfile==NULL) {
 		l = strlen(getenv("XDG_CONFIG_HOME")) + strlen(listpath);
-		listfile = calloc(sizeof(char), l);
+		XALLOC(listfile, char, l);
 		snprintf(listfile, l, listpath, getenv("XDG_CONFIG_HOME"));
 		num_tracks = load_lib(listfile);
 	} else {
@@ -796,13 +742,13 @@ int main(int argc, char *argv[]) {
 	opensock();
 	printf("Listening on Socket %d.\n", socket_port);
 
-    /*pid = fork();
+    pid = fork();
     if(pid < 0)
-        die("There is no Fork in Zion Error: failed to fork\n");
+        die("Error: failed to fork\n");
     else if(pid != 0) {
     	printf("forked to pid %d\n", pid);
     	return 0;
-    }*/
+    }
 
 	pthread_mutex_init(&lock, NULL);
 	pthread_create(&p_listener, NULL, listener, NULL);
