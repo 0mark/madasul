@@ -215,7 +215,7 @@ void listFromFilters(Filter *flt) {
 			return;
 		}
 
-		if(talk2sock("shorttracklist")<0) {
+		if(talk2sock("shrtlib")<0) {
 			strcpy(errorstring, "ERROR sending command");
 			return;
 		}
@@ -225,6 +225,7 @@ void listFromFilters(Filter *flt) {
 			if(fscanf(fp, "%u\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%u\t%[^\n]\n", &tracknum, path, genre, artist, album, &atrack, title/*, date*/)!=7)
 				break;
 			rm = 0;
+			printf("%s\n",path);
 			if(flt->ar)
 				rm += regexec(&preg, artist, 0, NULL, 0) ? 0 : 1;
 			if(flt->al)

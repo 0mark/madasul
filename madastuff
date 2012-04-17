@@ -1,0 +1,23 @@
+for i in 1 3 5; do
+    case ${@:$i:1} in
+        -p) let i++; port="${@:$i:1}" ;;
+        -h) let i++; host="${@:$i:1}" ;;
+        -*) extravar "${@:$i:1}" "${@:$i:1}" ;;
+        *) cmd="${@:$i}"; break ;;
+    esac
+done
+
+if [ "$port" == "" ]; then
+    if [[ "$MADAPORT" =~ ^[0-9]+$ ]]; then
+        port=$MADAPORT
+    else
+        port=6666
+    fi
+fi
+if [ "$host" == "" ]; then
+    if [[ ! "$MADAHOST" == "" ]]; then
+        host="$MADAHOST"
+    else
+        host="127.0.0.1"
+    fi
+fi

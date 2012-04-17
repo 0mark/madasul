@@ -1,0 +1,1 @@
+./mcp $MADAPORT play $(./mcp $MADAPORT showlib '#i: $a - $l - $t' | dmenu -l 30 -i -p "Select Track: " | cut -d ":" -f 1)

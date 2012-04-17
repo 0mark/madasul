@@ -1,0 +1,7 @@
+registerhandler mp2 mp3,2,mpg123 %s 
+registerhandler ogg,2,ogg123 %s
+
+# load playlist
+loadlib mlist
+random
+  

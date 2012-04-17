@@ -1,6 +1,9 @@
 #!/bin/bash
 
-p=$1
-shift
+extravar() {
+    echo "Unknwon Parameter $1"
+}
 
-echo "$@" | socat - tcp-connect:127.0.0.1:$p
+. madastuff
+
+echo "$cmd" '|' socat - tcp-connect:$host:$port

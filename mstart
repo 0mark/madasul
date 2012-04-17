@@ -1,0 +1,19 @@
+#!/bin/bash
+
+extravar() {
+    case "$1" in
+        *)
+            echo "Unknwon Parameter $1"
+            exit
+            ;;
+    esac
+}
+
+. madastuff
+
+./madasul -p $port &
+sleep 1
+
+while read config; do
+    ./mcp -p $port -h $host "$config"
+done < <(cat "$cmd" | egrep '^[^#]' | egrep -v '^\s*$')
