@@ -11,9 +11,9 @@ extravar() {
 
 . madastuff
 
-./madasul -p $port &
-sleep 1
+#./madasul -p $port &
+#sleep 1
 
 while read config; do
     ./mcp -p $port -h $host "$config"
-done < <(cat "$cmd" | egrep '^[^#]' | egrep -v '^\s*$')
+done < <(egrep '^[^#]' "$cmd" | egrep -v '^\s*$')

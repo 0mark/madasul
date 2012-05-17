@@ -1,3 +1,8 @@
+/*
+ *
+ */
+
+/* includes */
 #define _POSIX_C_SOURCE 1
 #include <stdio.h>
 #define __USE_BSD
@@ -13,18 +18,8 @@
 #include <sys/wait.h>
 #include <stdarg.h>
 
-// TODO:
-// export playlist in playlist input format
-// gap time
-// hooks
-// set hooks by command / file
-// sel handler by command
-// add to playlist by command
-// add to lib by command
-// clear lib/playlist by command
-
 /* constants */
-#define OPEN_FILE_ERR "Error: failed to open file %s\n"
+#define OPEN_FILE_ERR      "Error: failed to open file %s\n"
 #define READ               0
 #define WRITE              1
 #define ERR                2
@@ -32,25 +27,24 @@
 #define TRACKS_BUF_SIZE	   128
 #define DEFAULT_STATUS     "Track (#c of ##): $p\nGenre: $g\nArtist: $a\nAlbum: $l\nTrack: [#n] $t\n"
 #define DEFAULT_SHOWLIB    "#i:\t$p\n""\t[$g] ($a - $l - #n) $t\n"
-
+#define debug
 
 /* macros */
 #define LENGTH(X)                  (sizeof X / sizeof X[0])
-#define NEED_LIB(cmd)              (cmd==PLAYPAUSE || cmd==PLAY || cmd==NEXT || cmd==PREV || cmd==STATUS /*|| cmd==SHRTSTAT*/ || cmd==SHOWLIB /*|| cmd==SHRTLIB*/ || cmd==SETLIST || cmd==SHOWLIST)
+#define NEED_LIB(cmd)              (cmd==PLAYPAUSE || cmd==PLAY || cmd==NEXT || cmd==PREV || cmd==STATUS || cmd==SHOWLIB || cmd==SETLIST || cmd==SHOWLIST)
 #define STOPPLAYER                 if(player_pid>0) { call_hook(H_PLAY_STOP); kill(player_pid, SIGKILL); }
 #define XALLOC(target, type, size) if((target = calloc(sizeof(type), size)) == NULL) die("Error: calloc failed\n")
-
 
 /* enums */
 enum { STOP, PAUSE, PLAYPAUSE, PLAY, NEXT, PREV, RANDOM,
        DIE, STATUS, REGISTERHANDLER,
        LOADLIB, SHOWLIB,
        SETLIST, SHOWLIST,
-       /*SHRTSTAT, SHRTLIB,*/
        SETHOOK, CommandLast };
 enum { INC, DEC, SET };
 enum { IM_Dying, IM_Stopped, IM_Paused, IM_Playing, StateLast };
 enum { H_PLAY_BEFORE, H_PLAY_AFTER, H_PLAY_FAIL, H_SCOUT, H_PLAY_STOP, H_REGISTERHANDLER_FAIL, H_LOADLIB_FAIL, H_SETLIST_FAIL, H_PAUSE, H_UNPAUSE, HookLast };
+
 
 /* structs */
 typedef struct file_t {
@@ -69,14 +63,12 @@ typedef struct handler_t {
 	int out;
 } handler_t;
 
-//#include "config.h"
 
 /* function declarations */
 // helper
 static void die(const char *errstr, ...);
 static void sock_printf(int cmd_sock, const char *format, ...);
 static void usage(void);
-//static void sprintr(char *result, const char *cmd, ...);
 // init
 static int load_lib(char* file);
 static void init_handlers();
@@ -95,34 +87,29 @@ static void* player();
 
 
 /* variables */
-static int socket_port = 6666;
-int ctrl_sock = -1;
-
-file_t** library; // list of files, including metadata
-handler_t** handlers; // list of file handlers
-int* playlist = NULL;
-
-int cur_track = 0; // current track in library
-//int cur_pl_track = 0; // current track in playlist
-int num_tracks; // number of tracks in playlist
-int num_pl_tracks; // number of tracks in playlist
-
-int state = IM_Stopped; // state, one of IM_Dying, IM_Stopped, IM_Paused, IM_Playing, StateLast
-int rnd = 0; // state of random
-
 pthread_mutex_t lock;
 pid_t player_pid = -1;
-
-char** typenames = NULL; // list of strings naming file types (eg. ogg, mp3, ...)
-int* types = NULL; // for every typename a number, indicating the correspondig handler
-int num_types; // number of loaded file handlers
-
+static int socket_port = 6666;
+int ctrl_sock = -1;
+// library and handlers
+file_t** library; // list of files with including metadata
+int num_tracks; // number of tracks in library
+int* playlist = NULL; // list of index numbers in library
+int num_pl_tracks; // number of tracks in playlist
+char** typenames = NULL; // list of file types
+int num_types; // number of file types
+int* types = NULL; // maps files types to handlers
+handler_t** handlers; // list of handlers
+// states
+int cur_track = 0; // current track in library
+int state = IM_Stopped; // state, one of IM_Dying, IM_Stopped, IM_Paused, IM_Playing, StateLast
+int rnd = 0; // randomize?
+// commands an hooks
 char* ctrl_cmds[] = { "stop", "pause", "playpause", "play", "next", "prev", "random",
                       "die", "status", "registerhandler",
                       "loadlib", "showlib",
                       "setlist", "showlist",
-                      /*"shrtstat", "shrtlib",*/
-					  "sethook" }; // help
+					  "sethook" };
 char* hook_names[] = { "play_before", "play_after", "play_fail", "scout", "play_stop", "registerhandler_fail", "loadlib_fail", "setlist_fail", "pause", "unpause" };
 char* hooks[CommandLast + HookLast];
 
@@ -133,7 +120,8 @@ void die(const char *errstr, ...) {
 	va_start(ap, errstr);
 	vfprintf(stderr, errstr, ap);
 	va_end(ap);
-	exit(1);
+
+    exit(1);
 }
 
 void sock_printf(int cmd_sock, const char *format, ...) {
@@ -141,7 +129,10 @@ void sock_printf(int cmd_sock, const char *format, ...) {
 	va_list ap;
 
 	va_start(ap, format);
-	vsnprintf(msg, BUF_SIZE, format, ap);
+    vsnprintf(msg, BUF_SIZE, format, ap);
+#ifndef debug
+    printf("sock_printf: %d, %s\n"format"\n", cmd_sock, format, ap);
+#endif
 
 	send(cmd_sock, msg, strlen(msg), MSG_NOSIGNAL);
 	va_end(ap);
@@ -177,88 +168,54 @@ void init_handlers() {
 }
 
 int register_handler(char* b) {
-	//FILE *f;
-	char /*b=NULL, */*s, *parts[3];
-	int hc = 0, tc = num_types, len, i, l = 0;//, cont = 0;
+	char *s, *parts[3];
+	int hc = 0, tc = num_types, len, i, l = 0;
 
-    /*printf("****** %d\n", num_types);
-    for(i=0; i<num_types; i++) {
-        free(typenames[i]);
-        free(handlers[i]);
+    for(i = 0; i<3; i++) {
+        parts[i] = b;
+        if(!(b=nxt(i==2?'\0':',', b))) {
+            printf("Warning: error in handler list in line %d\n", l);
+            return 0;
+        }
     }
-	free(typenames);
-	free(types);
-    free(handlers);
-	XALLOC(b, char, BUF_SIZE);
-    XALLOC(typenames, char*, TRACKS_BUF_SIZE);
-    XALLOC(types, char, TRACKS_BUF_SIZE);
-	XALLOC(handlers, handler_t, TRACKS_BUF_SIZE);*/
 
-	/*if(!(f = fopen(file, "r"))) {
-		free(b);
-		call_hook(H_REGISTERHANDLER_FAIL);
-		return -1;
-	}*/
+    b = parts[0];
+    i = 1;
+    while(i) {
+        s = b;
+        while(*b && *b!=' ') b++;
+        if(!*b) i = 0;
+        *b = 0;
+        len = strlen(s);
+        XALLOC(typenames[tc], char, len);
+        strncpy(typenames[tc], s, len);
+        types[tc] = hc;
+        b++;
+        tc++;
+        if(tc>TRACKS_BUF_SIZE) {
+            printf("Warning: too many filetypes\n");
+            return tc;
+        }
+    }
 
-	//while(!feof(f)) {
-		//fgets(b, BUF_SIZE, f);
-		//l++;
-		//if(*b == '#' || *b=='\n' || !*b) continue;
+    if(handlers[hc]) free(handlers[hc]); // why?
+    XALLOC(handlers[hc], handler_t, 1);
 
-		// split string
-		for(i = 0; i<3; i++) {
-			parts[i] = b;
-			if(!(b=nxt(i==2?'\0':',', b))) {
-				printf("Warning: error in handler list in line %d\n", l);
-				return 0;
-			}
-		}
-		/*if(cont) {
-			cont = 0;
-			continue;
-		}*/
+    // output
+    handlers[hc]->out = atoi(parts[1]);
 
-		// typenames
-		b = parts[0];
-		i = 1;
-		while(i) {
-			s = b;
-			while(*b && *b!=' ') b++;
-			if(!*b) i = 0;
-			*b = 0;
-			len = strlen(s);
-            XALLOC(typenames[tc], char, len);
-			strncpy(typenames[tc], s, len);
-			types[tc] = hc;
-			b++;
-			tc++;
-			if(tc>TRACKS_BUF_SIZE) {
-                //free(b);
-				printf("Warning: too many filetypes\n");
-				return tc;
-			}
-		}
+    // executable
+    len = strlen(parts[2]);
+    XALLOC(handlers[hc]->executable, char, len);
+    strncpy(handlers[hc]->executable, parts[2], len);
 
-		if(handlers[hc]) free(handlers[hc]); // why?
-        XALLOC(handlers[hc], handler_t, 1);
+    hc++;
+    if(hc>TRACKS_BUF_SIZE) {
+        free(b);
+        printf("Warning: too many handler\n");
+        return tc;
+    }
 
-		// output
-		handlers[hc]->out = atoi(parts[1]);
-
-		// executable
-		len = strlen(parts[2]);
-		XALLOC(handlers[hc]->executable, char, len);
-		strncpy(handlers[hc]->executable, parts[2], len);
-
-		hc++;
-		if(hc>TRACKS_BUF_SIZE) {
-            free(b);
-			printf("Warning: too many handler\n");
-			return tc;
-		}
-	//}
-
-	//free(b);
 	return tc;
 }
 
@@ -386,6 +343,10 @@ void sprintr(char **result, const char *cmd, ...) {
 
 	va_start(ap, cmd);
 
+#ifndef debug
+    printf("sprintr: %s\n", cmd);
+#endif
+
     XALLOC(buf, char, strlen(cmd));
     strcpy(buf, cmd);
 
@@ -405,7 +366,7 @@ void sprintr(char **result, const char *cmd, ...) {
                             buf = tmp;
                         }
                     } else {
-                        die("Error: invalid sprintr call. This should never happen!\n");
+                        die("Error: invalid sprintr call. This should never happen!\n  %s\n  %s\n", cmd, p);
                     }
                     break;
                 case '#':
@@ -860,7 +821,9 @@ void run() {
 }
 
 int main(int argc, char *argv[]) {
-	pid_t pid;
+#ifndef debug
+    pid_t pid;
+#endif
 	char *listfile = NULL, /**handlerfile = NULL,*/ *listpath = "%s/madasul/list"/*, *handlerpath = "%s/madasul/handler"*/;
 	int i, l;
 
@@ -877,33 +840,10 @@ int main(int argc, char *argv[]) {
 				else
 					usage();
 				break;
-			/*case 'f':
-				if(++i < argc) {
-					listfile = argv[i];
-				} else
-					usage();
-				break;
-			case 'h':
-				if(++i < argc) {
-					handlerfile = argv[i];
-				} else
-					usage();
-				break;*/
 		}
 	}
 
     init_handlers();
-    /*if(handlerfile==NULL) {
-		l = strlen(getenv("XDG_CONFIG_HOME")) + strlen(handlerpath);
-		XALLOC(handlerfile, char, l);
-		snprintf(handlerfile, l, handlerpath, getenv("XDG_CONFIG_HOME"));
-		num_types = register_handler(handlerfile);
-		free(handlerfile);
-	} else {
-		if((num_types=register_handler(handlerfile))<0)
-			die(OPEN_FILE_ERR, handlerfile);
-	}
-	if(num_types>=0) printf("loaded %d file type handler\n", num_types);*/
 
 	if(listfile==NULL) {
 		l = strlen(getenv("XDG_CONFIG_HOME")) + strlen(listpath);
@@ -924,13 +864,16 @@ int main(int argc, char *argv[]) {
 
 	for(i=0; i<CommandLast + HookLast; i++)
 		hooks[i] = NULL;
-/*    pid = fork();
-    if(pid < 0)
+
+#ifndef debug
+    pid = fork();
+    if(pid < 0) {
         die("Error: failed to fork\n");
-    else if(pid != 0) {
-    	printf("forked to pid %d\n", pid);
-    	return 0;
-    }*/
+    } else if(pid != 0) {
+        printf("forked to pid %d\n", pid);
+        return 0;
+    }
+#endif
 
 	run();
 

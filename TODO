@@ -1,0 +1,13 @@
+TODO:
+
+Simple:
+ - gap time
+ - add to playlist by command
+ - add to lib by command
+ - clear lib/playlist by command
+Hard:
+ - Multiple configs in one instance
+Nightmare
+ - remove memory holes 'n stuff
+ - fix bugs
+ - avoid calling cthulhu hook at all costs!

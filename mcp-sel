@@ -1,1 +1,11 @@
-./mcp $MADAPORT play $(./mcp $MADAPORT showlib '#i: $a - $l - $t' | dmenu -l 30 -i -p "Select Track: " | cut -d ":" -f 1)
+#!/bin/bash
+
+extravar() {
+    echo "Unknwon Parameter $1"
+}
+
+. madastuff
+
+track=$(./mcp -h $host -p $port showlib '#i: $a - $l - $t' | dmenu -l 30 -i -p "Select Track: " | cut -d ":" -f 1)
+
+./mcp -h $host -p $port play $track
