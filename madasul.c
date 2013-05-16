@@ -355,8 +355,8 @@ void sprintr(char **result, const char *cmd, ...) {
             switch(p[0]) {
                 case '$':
                     if((pp=va_arg(ap, char*))!=NULL) {
-                        while((pos = (int)strstr(buf, p))!=0) {
-                            pos -= (int)buf;
+                        while((pos = (intptr_t)strstr(buf, p))!=0) {
+                            pos -= (intptr_t)buf;
                             len = strlen(pp);
                             XALLOC(tmp, char, strlen(buf) + len - 1);
                             strncpy(tmp, buf, pos);
@@ -377,8 +377,8 @@ void sprintr(char **result, const char *cmd, ...) {
                         n /= 10;
                         len++;
                     }
-                    while((pos = (int)strstr(buf, p))!=0) {
-                        pos -= (int)buf;
+                    while((pos = (intptr_t)strstr(buf, p))!=0) {
+                        pos -= (intptr_t)buf;
                         XALLOC(tmp, char, strlen(buf) + len - 1);
                         strncpy(tmp, buf, pos);
                         snprintf(tmp + pos, len + 1, "%d", val);
@@ -408,6 +408,7 @@ pid_t play(file_t* track, int* infp, int* outfp) {
         die("Error: failed to open pipe\n");
 
 	strncpy(pbuf, handlers[type]->executable, BUF_SIZE-1);
+	printf("%s, %s\n", handlers[type]->executable, track->path);
 	p = strtok(pbuf, " ");
 	while(p!=NULL && i<15) {
         snprintf(spbuf, BUF_SIZE, p, track->path);
@@ -451,8 +452,7 @@ int get_cmd(int *cmd_sock, char *val) {
 	struct sockaddr_un cli_addr;
 	socklen_t clilen;
 	char buf[BUF_SIZE];
-	int i, n, len, cmd = -1;
-
+	int i, n, len = 0, cmd = -1;
 
 	clilen = sizeof(cli_addr);
 	if((*cmd_sock = accept(ctrl_sock, (struct sockaddr *)&cli_addr, &clilen)) < 0)
@@ -824,7 +824,7 @@ int main(int argc, char *argv[]) {
 #ifndef debug
     pid_t pid;
 #endif
-	char *listfile = NULL, /**handlerfile = NULL,*/ *listpath = "%s/madasul/list"/*, *handlerpath = "%s/madasul/handler"*/;
+	char *listfile = NULL, /**handlerfile = NULL,*/ *listpath = "%s/madasul/list"/*, *handlerpath = "%s/madasul/handler"*/, *buf;
 	int i, l;
 
 
@@ -846,7 +846,17 @@ int main(int argc, char *argv[]) {
     init_handlers();
 
 	if(listfile==NULL) {
-		l = strlen(getenv("XDG_CONFIG_HOME")) + strlen(listpath);
+		buf = getenv("XDG_CONFIG_HOME");
+		if(buf==NULL) {
+			char *home = getenv("HOME");
+			if(home==NULL) {
+				die("Error: $HOME not set\n");
+			}
+			l = strlen(home) + 8;
+			XALLOC(buf, char, l);
+			snprintf(buf, l, "%s/.config", home);
+		}
+		l = strlen(buf) + strlen(listpath);
 		XALLOC(listfile, char, l);
 		snprintf(listfile, l, listpath, getenv("XDG_CONFIG_HOME"));
 		num_tracks = load_lib(listfile);

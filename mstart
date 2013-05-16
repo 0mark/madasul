@@ -11,8 +11,8 @@ extravar() {
 
 . madastuff
 
-#./madasul -p $port &
-#sleep 1
+./madasul -p $port &
+sleep 1
 
 while read config; do
     ./mcp -p $port -h $host "$config"

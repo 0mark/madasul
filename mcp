@@ -6,4 +6,5 @@ extravar() {
 
 . madastuff
 
-echo "$cmd" '|' socat - tcp-connect:$host:$port
+#echo "$cmd" '|' socat - tcp-connect:$host:$port 
+echo "$cmd" | socat - tcp-connect:$host:$port 
