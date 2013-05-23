@@ -1,5 +1,13 @@
-/*
- *
+/* Madasul is a music playlist daemon, hence its demonic name
+ * Use for other playlists should be possible, but meta data fields
+ * could be unsuitable.
+ * 
+ * Note:
+ * - "library" is a list of files (type, path and metadata)
+ * - "playlist" is a list of numbers (as indexed in "library")
+ * - "handlers" is a list of file handlers
+ * - "types" is a map from type to handlers (so multiple types
+ *           could have the same handler)
  */
 
 /* includes */
@@ -27,7 +35,7 @@
 #define TRACKS_BUF_SIZE	   128
 #define DEFAULT_STATUS     "Track (#c of ##): $p\nGenre: $g\nArtist: $a\nAlbum: $l\nTrack: [#n] $t\n"
 #define DEFAULT_SHOWLIB    "#i:\t$p\n""\t[$g] ($a - $l - #n) $t\n"
-#define debug
+//#define debug
 
 /* macros */
 #define LENGTH(X)                  (sizeof X / sizeof X[0])
@@ -69,12 +77,13 @@ typedef struct handler_t {
 static void die(const char *errstr, ...);
 static void sock_printf(int cmd_sock, const char *format, ...);
 static void usage(void);
+static void sprintr(char **result, const char *cmd, ...);
+static char *nxt(char c, char *s);
 // init
-static int load_lib(char* file);
 static void init_handlers();
 static int register_handler(char* file);
+static int load_lib(char* file);
 static int opensock();
-static void run();
 // worker
 static pid_t play(file_t* track, int* infp, int* outfp);
 static int get_cmd(int *cmd_sock, char *val);
@@ -84,6 +93,7 @@ static void scout(unsigned int whatdo, unsigned int val);
 // threads
 static void* listener();
 static void* player();
+static void run();
 
 
 /* variables */
@@ -92,19 +102,19 @@ pid_t player_pid = -1;
 static int socket_port = 6666;
 int ctrl_sock = -1;
 // library and handlers
-file_t** library; // list of files with including metadata
-int num_tracks; // number of tracks in library
-int* playlist = NULL; // list of index numbers in library
-int num_pl_tracks; // number of tracks in playlist
-char** typenames = NULL; // list of file types
-int num_types; // number of file types
-int* types = NULL; // maps files types to handlers
-handler_t** handlers; // list of handlers
+file_t** library;
+int num_tracks;
+int* playlist = NULL;
+int num_pl_tracks;
+char** typenames = NULL;
+int num_types;
+int* types = NULL;
+handler_t** handlers;
 // states
-int cur_track = 0; // current track in library
+int cur_track = 0;
 int state = IM_Stopped; // state, one of IM_Dying, IM_Stopped, IM_Paused, IM_Playing, StateLast
-int rnd = 0; // randomize?
-// commands an hooks
+int rnd = 0;
+// commands and hooks
 char* ctrl_cmds[] = { "stop", "pause", "playpause", "play", "next", "prev", "random",
                       "die", "status", "registerhandler",
                       "loadlib", "showlib",
@@ -112,6 +122,7 @@ char* ctrl_cmds[] = { "stop", "pause", "playpause", "play", "next", "prev", "ran
 					  "sethook" };
 char* hook_names[] = { "play_before", "play_after", "play_fail", "scout", "play_stop", "registerhandler_fail", "loadlib_fail", "setlist_fail", "pause", "unpause" };
 char* hooks[CommandLast + HookLast];
+
 
 /* function definitions */
 void die(const char *errstr, ...) {
@@ -130,8 +141,8 @@ void sock_printf(int cmd_sock, const char *format, ...) {
 
 	va_start(ap, format);
     vsnprintf(msg, BUF_SIZE, format, ap);
-#ifndef debug
-    printf("sock_printf: %d, %s\n"format"\n", cmd_sock, format, ap);
+#ifdef debug
+    printf("sock_printf: %d, %s\n", cmd_sock, format);
 #endif
 
 	send(cmd_sock, msg, strlen(msg), MSG_NOSIGNAL);
@@ -140,7 +151,68 @@ void sock_printf(int cmd_sock, const char *format, ...) {
 
 void usage() {
 	fputs("madasul - evil media daemon\n", stderr);
-	die("usage: madasul [-p port] [-f library file] [-h handler file]\n");
+	die("usage: madasul [-p port]\n");
+}
+
+void sprintr(char **result, const char *cmd, ...) {
+	va_list ap;
+    char *p, *pp;
+    char *tmp, *buf;
+    int pos, len, n, val;
+
+	va_start(ap, cmd);
+
+#ifdef debug
+    printf("sprintr: %s\n", cmd);
+#endif
+
+    XALLOC(buf, char, strlen(cmd));
+    strcpy(buf, cmd);
+
+    while(1) {
+        if((p=va_arg(ap, char*))!=NULL) {
+            switch(p[0]) {
+                case '$':
+                    if((pp=va_arg(ap, char*))==NULL) {
+                    	pp = "";
+                    }
+                    while((pos = (intptr_t)strstr(buf, p))!=0) {
+                        pos -= (intptr_t)buf;
+                        len = strlen(pp);
+                        XALLOC(tmp, char, strlen(buf) + len - 1);
+                        strncpy(tmp, buf, pos);
+                        strcpy(tmp + pos, pp);
+                        strcpy(tmp + pos + len, buf + pos + 2);
+                        free(buf);
+                        buf = tmp;
+                    }
+                    break;
+                case '#':
+                    n = val = va_arg(ap, int);
+                    len = 1;
+                    if(n < 0) n = (n == INT_MIN) ? INT_MAX : -n;
+                    while (n > 9) {
+                        n /= 10;
+                        len++;
+                    }
+                    while((pos = (intptr_t)strstr(buf, p))!=0) {
+                        pos -= (intptr_t)buf;
+                        XALLOC(tmp, char, strlen(buf) + len - 1);
+                        strncpy(tmp, buf, pos);
+                        snprintf(tmp + pos, len + 1, "%d", val);
+                        strcpy(tmp + pos + len, buf + pos + 2);
+                        free(buf);
+                        buf = tmp;
+                    }
+                    break;
+                default:
+                    die("Error: invalid sprintr call. This should never happen!\n");
+            }
+        } else break;
+    }
+
+    *result = buf;
+	va_end(ap);
 }
 
 char *nxt(char c, char *s) {
@@ -335,68 +407,6 @@ int opensock() { // TODO: clean up
     return(1);
 }
 
-void sprintr(char **result, const char *cmd, ...) {
-	va_list ap;
-    char *p, *pp;
-    char *tmp, *buf;
-    int pos, len, n, val;
-
-	va_start(ap, cmd);
-
-#ifndef debug
-    printf("sprintr: %s\n", cmd);
-#endif
-
-    XALLOC(buf, char, strlen(cmd));
-    strcpy(buf, cmd);
-
-    while(1) {
-        if((p=va_arg(ap, char*))!=NULL) {
-            switch(p[0]) {
-                case '$':
-                    if((pp=va_arg(ap, char*))!=NULL) {
-                        while((pos = (intptr_t)strstr(buf, p))!=0) {
-                            pos -= (intptr_t)buf;
-                            len = strlen(pp);
-                            XALLOC(tmp, char, strlen(buf) + len - 1);
-                            strncpy(tmp, buf, pos);
-                            strcpy(tmp + pos, pp);
-                            strcpy(tmp + pos + len, buf + pos + 2);
-                            free(buf);
-                            buf = tmp;
-                        }
-                    } else {
-                        die("Error: invalid sprintr call. This should never happen!\n  %s\n  %s\n", cmd, p);
-                    }
-                    break;
-                case '#':
-                    n = val = va_arg(ap, int);
-                    len = 1;
-                    if(n < 0) n = (n == INT_MIN) ? INT_MAX : -n;
-                    while (n > 9) {
-                        n /= 10;
-                        len++;
-                    }
-                    while((pos = (intptr_t)strstr(buf, p))!=0) {
-                        pos -= (intptr_t)buf;
-                        XALLOC(tmp, char, strlen(buf) + len - 1);
-                        strncpy(tmp, buf, pos);
-                        snprintf(tmp + pos, len + 1, "%d", val);
-                        strcpy(tmp + pos + len, buf + pos + 2);
-                        free(buf);
-                        buf = tmp;
-                    }
-                    break;
-                default:
-                    die("Error: invalid sprintr call. This should never happen!\n");
-            }
-        } else break;
-    }
-
-    *result = buf;
-	va_end(ap);
-}
-
 pid_t play(file_t* track, int* infp, int* outfp) {
     int p_stdin[2], p_stdout[2], type = track->type;
     pid_t pid;
@@ -497,7 +507,7 @@ void call_hook(int h) {
             "#p", socket_port, // "#ri" = PID,
             NULL
         );
-        // Im ok with Hooks spawning two processes, they aint hang in memory forlong
+        // Im ok with Hooks spawning two processes, they aint hang in memory for long
         system(cmd);
 	}
 }
@@ -611,7 +621,7 @@ void* listener() {
 		                      "#n", library[cur_track]->number,
 							  "$t", library[cur_track]->title,
 							  NULL);
-					sock_printf(cmd_sock, "%s\n", buf);
+					sock_printf(cmd_sock, "%s", buf);
 					free(buf);
 					break;
 				case REGISTERHANDLER:
@@ -627,18 +637,6 @@ void* listener() {
 						} else
 							sock_printf(cmd_sock, "No file specified\n");
 					break;
-/*				case SHRTSTAT:
-					if(num_tracks<1)
-						break;
-					sock_printf(cmd_sock, "%d\t%d\t%d\t%d\t%s\t%s\t%s\t%s\t%d\t%s\n",
-						cur_track, num_tracks,
-						state, rnd,
-						library[cur_track]->path,
-						library[cur_track]->genre,
-						library[cur_track]->artist,
-						library[cur_track]->album,
-						library[cur_track]->number, library[cur_track]->title);
-					break;*/
 				case RANDOM:
 					if(strlen(val)) i = atoi(val);
 					else i = !rnd;
@@ -663,16 +661,6 @@ void* listener() {
 						free(buf);
 					}
 					break;
-/*				case SHRTLIB:
-					for(i=0; i<num_tracks; i++)
-						sock_printf(cmd_sock, "%d\t%s\t%s\t%s\t%s\t%d\t%s\t\n",
-							i, library[i]->path,
-							library[i]->genre,
-							library[i]->artist,
-							library[i]->album,
-							library[i]->number,
-							library[i]->title);
-					break;*/
 				case SETLIST:
 					i = ii = iii = 0;
 					n = strlen(val);
@@ -821,11 +809,10 @@ void run() {
 }
 
 int main(int argc, char *argv[]) {
-#ifndef debug
+#ifdef debug
     pid_t pid;
 #endif
-	char *listfile = NULL, /**handlerfile = NULL,*/ *listpath = "%s/madasul/list"/*, *handlerpath = "%s/madasul/handler"*/, *buf;
-	int i, l;
+	int i;
 
 
 	for(i = 1; i < argc && argv[i][0] == '-' && argv[i][1] != '\0' && argv[i][2] == '\0'; i++) {
@@ -840,32 +827,14 @@ int main(int argc, char *argv[]) {
 				else
 					usage();
 				break;
+			default:
+				usage();
+				break;
+
 		}
 	}
 
     init_handlers();
-
-	if(listfile==NULL) {
-		buf = getenv("XDG_CONFIG_HOME");
-		if(buf==NULL) {
-			char *home = getenv("HOME");
-			if(home==NULL) {
-				die("Error: $HOME not set\n");
-			}
-			l = strlen(home) + 8;
-			XALLOC(buf, char, l);
-			snprintf(buf, l, "%s/.config", home);
-		}
-		l = strlen(buf) + strlen(listpath);
-		XALLOC(listfile, char, l);
-		snprintf(listfile, l, listpath, getenv("XDG_CONFIG_HOME"));
-		num_tracks = load_lib(listfile);
-		free(listfile);
-	} else {
-		if((num_tracks=load_lib(listfile))<0)
-			die(OPEN_FILE_ERR, listfile);
-	}
-	if(num_tracks>=0) printf("loaded %d files from list\n", num_tracks);
 
 	srandom((unsigned int)time(NULL));
 
@@ -875,7 +844,7 @@ int main(int argc, char *argv[]) {
 	for(i=0; i<CommandLast + HookLast; i++)
 		hooks[i] = NULL;
 
-#ifndef debug
+#ifdef debug
     pid = fork();
     if(pid < 0) {
         die("Error: failed to fork\n");
