@@ -241,12 +241,12 @@ void init_handlers() {
 
 int register_handler(char* b) {
 	char *s, *parts[3];
-	int hc = 0, tc = num_types, len, i, l = 0;
+	int hc = 0, tc = num_types, len, i;
 
     for(i = 0; i<3; i++) {
         parts[i] = b;
         if(!(b=nxt(i==2?'\0':',', b))) {
-            printf("Warning: error in handler list in line %d\n", l);
+            printf("Warning: error in handler definition %s\n", b);
             return 0;
         }
     }
@@ -316,7 +316,7 @@ int load_lib(char* file) {
 			b = strtok(NULL, "\t");
 		}
 
-		if(n<2) {
+		if(n==2) {
 			printf("Warning: error reading line %d\n", l);
 			continue;
 		}
@@ -629,13 +629,11 @@ void* listener() {
 						if(i>0) {
 							num_types = register_handler(val);
 							if(num_types>0)
-								sock_printf(cmd_sock, "Loaded %d file handlers.\n", num_types);
-							else if(num_types==0)
-								sock_printf(cmd_sock, "No valid file handlers found.\n");
+								sock_printf(cmd_sock, "Set %d file handlers.\n", num_types);
 							else
-								sock_printf(cmd_sock, "File not found\n");
+								sock_printf(cmd_sock, "No valid file handlers.\n");
 						} else
-							sock_printf(cmd_sock, "No file specified\n");
+							sock_printf(cmd_sock, "No handlers specified\n");
 					break;
 				case RANDOM:
 					if(strlen(val)) i = atoi(val);
