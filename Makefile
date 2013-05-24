@@ -1,11 +1,11 @@
 include config.mk
 
-MD_SRC = madasul.c
+MD_SRC = madasuld.c
 MD_OBJ = ${MD_SRC:.c=.o}
 MC_SRC = angl.c ansi.c
 MC_OBJ = ${MC_SRC:.c=.o}
 
-all: options madasul #angl
+all: options madasuld #angl
 
 options:
 	@echo build options:
@@ -18,14 +18,10 @@ options:
 	@echo CC $<
 	@${CC} -c ${CFLAGS} $<
 
-${MD_OBJ}: config.h config.mk
-${MC_OBJ}: config.h config.mk
+${MD_OBJ}: config.mk
+${MC_OBJ}: config.mk
 
-config.h:
-	@echo creating $@ from config.def.h
-	@cp config.def.h $@
-
-madasul: ${MD_OBJ}
+madasuld: ${MD_OBJ}
 	@echo CC -o $@
 	@${CC} -o $@ ${MD_OBJ} ${LDFLAGS}
 	@echo
@@ -36,7 +32,7 @@ angl: ${MC_OBJ}
 
 clean:
 	@echo cleaning
-	@rm -f madasul angl ${MD_OBJ} ${MC_OBJ}
+	@rm -f madasuld angl ${MD_OBJ} ${MC_OBJ}
 
 install:
 	@echo installing executable file to ${DESTDIR}${PREFIX}/bin

@@ -1,4 +1,4 @@
-/* Madasul is a music playlist daemon, hence its demonic name
+/* Madasuld is a music playlist daemon, hence its demonic name
  * Use for other playlists should be possible, but meta data fields
  * could be unsuitable.
  * 
@@ -150,8 +150,8 @@ void sock_printf(int cmd_sock, const char *format, ...) {
 }
 
 void usage() {
-	fputs("madasul - evil media daemon\n", stderr);
-	die("usage: madasul [-p port]\n");
+	fputs("madasuld - evil media daemon\n", stderr);
+	die("usage: madasuld [-p port]\n");
 }
 
 void sprintr(char **result, const char *cmd, ...) {
@@ -504,7 +504,7 @@ void call_hook(int h) {
         sprintr(&cmd, hooks[h],
             "#c", cur_track, "##", num_tracks,
             "$f", f, "$g", g, "$a", a, "$l", l, "$t", t, "$y", y,
-            "#p", socket_port, // "#ri" = PID,
+            "#p", socket_port, "#ri" = PID,
             NULL
         );
         // Im ok with Hooks spawning two processes, they aint hang in memory for long

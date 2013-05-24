@@ -1,0 +1,21 @@
+#!/bin/bash
+
+extravar() {
+    echo "Unknwon Parameter $1"
+}
+
+. madastuff
+
+if [ -z $cmd ]; then
+	echo "Usage: madasul [-p port] command file"
+	echo
+	echo "The command file is a list of commands:"
+	cmd_help
+	echo
+else
+	./madasul -p $port
+
+	while read config; do
+    	./mcp -p $port -h $host "$config"
+	done < <(egrep '^[^#]' "$cmd" | egrep -v '^\s*$')
+fi
