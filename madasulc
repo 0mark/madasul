@@ -4,7 +4,7 @@ extravar() {
     echo "Unknwon Parameter $1"
 }
 
-. madastuff
+. madasul-bashstuff.sh
 
 if [ -z $cmd ]; then
 	echo "Usage: mcp [-p port] [-h host] command"

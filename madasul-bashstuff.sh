@@ -23,7 +23,7 @@ cmd_help() {
     echo "   registers a handler for mp2 and mp3 files, using mpg123"
     echo " - loadlib file"
     echo "   Loads a list of files. The list is tab-seperated:"
-    echo "   path   artist  album   title   date    genre"
+    echo "   type	path   artist  album   title   date    genre"
     echo " - showlib [format]"
     echo "   Prints current library to stdout"
     echo "   Format:"
