@@ -23,4 +23,12 @@ function readdir {
     done
 }
 
-readdir "$1"
+dir=$1
+
+if [ -z $dir ]; then
+	echo "Usage: mlg path"
+elif [ -d $dir ]; then
+	readdir "$dir"
+else
+	echo "Path not found"
+fi
