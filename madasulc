@@ -6,7 +6,7 @@ extravar() {
 
 . madasul-bashstuff.sh
 
-if [ -z $cmd ]; then
+if [ -z "$cmd" ]; then
 	echo "Usage: mcp [-p port] [-h host] command"
 	echo
 	echo "Commands:"

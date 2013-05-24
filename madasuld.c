@@ -35,7 +35,7 @@
 #define TRACKS_BUF_SIZE	   128
 #define DEFAULT_STATUS     "Track (#c of ##): $p\nGenre: $g\nArtist: $a\nAlbum: $l\nTrack: [#n] $t\n"
 #define DEFAULT_SHOWLIB    "#i:\t$p\n""\t[$g] ($a - $l - #n) $t\n"
-//#define debug
+#define debug
 
 /* macros */
 #define LENGTH(X)                  (sizeof X / sizeof X[0])
@@ -144,9 +144,6 @@ void sock_printf(int cmd_sock, const char *format, ...) {
 
 	va_start(ap, format);
     vsnprintf(msg, BUF_SIZE, format, ap);
-#ifdef debug
-    printf("sock_printf: %d, %s\n", cmd_sock, format);
-#endif
 
 	send(cmd_sock, msg, strlen(msg), MSG_NOSIGNAL);
 	va_end(ap);
@@ -244,7 +241,7 @@ void init_handlers() {
 
 int register_handler(char* b) {
 	char *s, *parts[3];
-	int hc = 0, tc = num_types, len, i;
+	int hc = num_types, tc = num_types, len, i;
 
     for(i = 0; i<3; i++) {
         parts[i] = b;
@@ -264,6 +261,7 @@ int register_handler(char* b) {
         len = strlen(s);
         XALLOC(typenames[tc], char, len);
         strncpy(typenames[tc], s, len);
+        printf("%d, %d\n", tc, hc);
         types[tc] = hc;
         b++;
         tc++;
@@ -421,7 +419,11 @@ pid_t play(file_t* track, int* infp, int* outfp) {
         die("Error: failed to open pipe\n");
 
 	strncpy(pbuf, handlers[type]->executable, BUF_SIZE-1);
-	printf("%s, %s\n", handlers[type]->executable, track->path);
+
+#ifdef debug
+	printf("%d, %s, %s\n", type, handlers[type]->executable, track->path);
+#endif
+
 	p = strtok(pbuf, " ");
 	while(p!=NULL && i<15) {
         snprintf(spbuf, BUF_SIZE, p, track->path);
@@ -659,6 +661,7 @@ void* listener() {
 								  "$l", library[i]->album ? library[i]->album : "",
 								  "#n", library[i]->number,
 								  "$t", library[i]->title ? library[i]->title : "",
+								  "#f", library[i]->type,
 								  NULL);
 						sock_printf(cmd_sock, buf);
 						sock_printf(cmd_sock, "\n");

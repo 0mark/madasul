@@ -2,7 +2,7 @@
 VERSION = "666.0.2"
 
 # paths
-PREFIX = /home/mark/bin
+PREFIX = /usr/local
 MANPREFIX = ${PREFIX}/man
 
 # dbus/notify adds ~250k mem usage

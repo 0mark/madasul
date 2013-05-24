@@ -6,16 +6,16 @@ extravar() {
 
 . madasul-bashstuff.sh
 
-if [ -z $cmd ]; then
+if [ -z "$cmd" ]; then
 	echo "Usage: madasul [-p port] command file"
 	echo
 	echo "The command file is a list of commands:"
 	cmd_help
 	echo
 else
-	./madasuld -p $port
+	madasuld -p $port &
 
 	while read config; do
-    	./mcp -p $port -h $host "$config"
+    	madasulc -p $port -h $host "$config"
 	done < <(egrep '^[^#]' "$cmd" | egrep -v '^\s*$')
 fi
