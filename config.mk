@@ -1,5 +1,5 @@
 # madasuk version
-VERSION = "666.0.1"
+VERSION = "666.0.2"
 
 # paths
 PREFIX = /home/mark/bin
