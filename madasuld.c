@@ -122,6 +122,9 @@ char* ctrl_cmds[] = { "stop", "pause", "playpause", "play", "next", "prev", "ran
 					  "sethook" };
 char* hook_names[] = { "play_before", "play_after", "play_fail", "scout", "play_stop", "registerhandler_fail", "loadlib_fail", "setlist_fail", "pause", "unpause" };
 char* hooks[CommandLast + HookLast];
+#ifndef debug
+    pid_t my_pid;
+#endif
 
 
 /* function definitions */
@@ -504,7 +507,10 @@ void call_hook(int h) {
         sprintr(&cmd, hooks[h],
             "#c", cur_track, "##", num_tracks,
             "$f", f, "$g", g, "$a", a, "$l", l, "$t", t, "$y", y,
-            "#p", socket_port, "#ri" = PID,
+            "#p", socket_port, 
+#ifndef debug
+            "#ri", my_pid,
+#endif
             NULL
         );
         // Im ok with Hooks spawning two processes, they aint hang in memory for long
@@ -807,9 +813,6 @@ void run() {
 }
 
 int main(int argc, char *argv[]) {
-#ifdef debug
-    pid_t pid;
-#endif
 	int i;
 
 
@@ -842,12 +845,12 @@ int main(int argc, char *argv[]) {
 	for(i=0; i<CommandLast + HookLast; i++)
 		hooks[i] = NULL;
 
-#ifdef debug
-    pid = fork();
-    if(pid < 0) {
+#ifndef debug
+    my_pid = fork();
+    if(my_pid < 0) {
         die("Error: failed to fork\n");
-    } else if(pid != 0) {
-        printf("forked to pid %d\n", pid);
+    } else if(my_pid != 0) {
+        printf("forked to pid %d\n", my_pid);
         return 0;
     }
 #endif

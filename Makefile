@@ -2,8 +2,6 @@ include config.mk
 
 MD_SRC = madasuld.c
 MD_OBJ = ${MD_SRC:.c=.o}
-MC_SRC = angl.c ansi.c
-MC_OBJ = ${MC_SRC:.c=.o}
 
 all: options madasuld #angl
 
@@ -26,40 +24,36 @@ madasuld: ${MD_OBJ}
 	@${CC} -o $@ ${MD_OBJ} ${LDFLAGS}
 	@echo
 
-angl: ${MC_OBJ}
-	@echo CC -o $@
-	@${CC} -o $@ ${MC_OBJ} ${LDFLAGS}
-
 clean:
 	@echo cleaning
-	@rm -f madasuld angl ${MD_OBJ} ${MC_OBJ}
+	@rm -f madasuld ${MD_OBJ} ${MC_OBJ}
 
 install:
 	@echo installing executable file to ${DESTDIR}${PREFIX}/bin
 	@mkdir -p ${DESTDIR}${PREFIX}/bin
-	@cp -f madasul mcp mcp-sel mlg mstart madastuff ${DESTDIR}${PREFIX}/bin
-	@sed "s#MADASULSRC#${PREFIX}/share/madasul/src/#g" < madasulm > ${DESTDIR}${PREFIX}/bin/madasulm
+	@cp -f madasuld madasul madasulc madasul-bashstuff.sh ${DESTDIR}${PREFIX}/bin
+	#@sed "s#MADASULSRC#${PREFIX}/share/madasul/src/#g" < madasulm > ${DESTDIR}${PREFIX}/bin/madasulm
+	@chmod 755 ${DESTDIR}${PREFIX}/bin/madasuld
 	@chmod 755 ${DESTDIR}${PREFIX}/bin/madasul
-	@chmod 755 ${DESTDIR}${PREFIX}/bin/mcp-sel
-	@chmod 755 ${DESTDIR}${PREFIX}/bin/mcp
-	@chmod 755 ${DESTDIR}${PREFIX}/bin/mlg
-	@chmod 755 ${DESTDIR}${PREFIX}/bin/mstart
-	@chmod 755 ${DESTDIR}${PREFIX}/bin/madastuff
-	@chmod 755 ${DESTDIR}${PREFIX}/bin/madasulm
+	@chmod 755 ${DESTDIR}${PREFIX}/bin/madasulc
+	@chmod 755 ${DESTDIR}${PREFIX}/bin/madasul-bashstuff.sh
 	@echo installing manual page to ${DESTDIR}${MANPREFIX}/man1
 	@mkdir -p ${DESTDIR}${PREFIX}/man/man1
+	@sed "s/VERSION/${VERSION}/g" < madasuld.1 > ${DESTDIR}${MANPREFIX}/man1/madasuld.1
 	@sed "s/VERSION/${VERSION}/g" < madasul.1 > ${DESTDIR}${MANPREFIX}/man1/madasul.1
-	@echo installing src files to ${DESTDIR}${PREFIX}/share/madasul
-	@mkdir -p ${DESTDIR}${PREFIX}/share/madasul/src
-	@cp -Rf madasul.c config.def.h config.mk Makefile ${DESTDIR}${PREFIX}/share/madasul/src
+	@sed "s/VERSION/${VERSION}/g" < madasulc.1 > ${DESTDIR}${MANPREFIX}/man1/madasulc.1
+	@echo installing examples to ${DESTDIR}${PREFIX}/share/madasul/examples
+	@mkdir -p ${DESTDIR}${PREFIX}/share/madasul/examples
+	@cp -Rf examples/* ${DESTDIR}${PREFIX}/share/madasul/examples
 
 uninstall:
+	rm ${DESTDIR}${PREFIX}/bin/madasuld
 	rm ${DESTDIR}${PREFIX}/bin/madasul
+	rm ${DESTDIR}${PREFIX}/bin/madasulc
+	rm ${DESTDIR}${PREFIX}/bin/madasul-bashstuff.sh
+	rm ${DESTDIR}${MANPREFIX}/man1/madasuld.1
 	rm ${DESTDIR}${MANPREFIX}/man1/madasul.1
-	rm ${DESTDIR}${PREFIX}/bin/mcp-sel
-	rm ${DESTDIR}${MANPREFIX}/man1/angl.1
-	rm ${DESTDIR}${PREFIX}/bin/madasulm
-	rm ${DESTDIR}${PREFIX}/bin/mcp
-	rm ${DESTDIR}${PREFIX}/bin/mlg
-	rm ${DESTDIR}${PREFIX}/bin/mstart
-	rm ${DESTDIR}${PREFIX}/bin/madastuff
+	rm ${DESTDIR}${MANPREFIX}/man1/madasulc.1
+	rm ${DESTDIR}${PREFIX}/share/madasul/examples/*
+	rmdir ${DESTDIR}${PREFIX}/share/madasul/examples
+	rmdir ${DESTDIR}${PREFIX}/share/madasul

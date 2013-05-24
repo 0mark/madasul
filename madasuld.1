@@ -1,0 +1,70 @@
+.TH madasuld 1 madasuld\-VERSION
+.SH NAME
+madasuld \- evil media daemon
+.SH SYNOPSIS
+.B madasul
+.RB [-p\ port]
+.SH DESCRIPTION
+Madasul handles playlists, but is way to evil for such low tasks as
+playing something, so lesser programs are utilized, wether they
+like it or not.
+.SH OPTIONS
+.TP
+.B \-p
+use port (default: 6666, since 666 is used by doom)
+.SH USAGE
+.SS Socket commands
+.TP
+.B stop, pause, playpause, random
+work as expected
+.TP
+.B play [n]
+starts playing current [or n-th] song
+.TP
+.B next [n], prev [n]
+go [n] or one song back or forth
+.TP
+.B die
+quits madasul
+.TP
+.B status [format]
+Prints current status to stdout
+Format:
+#c: current track, ##: number of tracks
+\$p: path, \$g: genre, \$a: artist, \$l: album, #n: number, \$t: title
+.TP
+.B registerhandler handler
+Register a new playing handler
+type[ type type...],outbuf,command %s
+where outbuf is the file descriptor the handler uses (usually 1 or 2)
+example:
+registerhandler mp2 mp3,2,mpg123 %s
+registers a handler for mp2 and mp3 files, using mpg123
+.TP
+.B loadlib file
+Loads a list of files. The list is tab-seperated:
+type	path   artist  album   title   date    genre
+.B showlib [format]
+Prints current library to stdout
+Format:
+#i: track number, ##: number of tracks
+\$p: path, \$g: genre, \$a: artist, \$l: album, #n: number, \$t: title
+.TP
+.B setlist playlist
+playlist is a comma seperated list of track numbers
+.TP
+.B showlist
+Print current playlist to stdout
+.TP
+.B sethook hook command
+Sets a hook.
+Variables in command:
+#c: current track, ##: number of tracks
+\$f: path, \$g: genre, \$a: artist, \$l: album, \$t: title
+\$y: type, #p: port, #ri: PID
+Every command is also a hook, also available:
+play_before, play_after, play_fail, scout, play_stop, registerhandler_fail, loadlib_fail, setlist_fail, pause, unpause
+.SH SEE ALSO
+.BR madasul,madasulc
+.SH BUGS
+DAS GANZE GEHIRN WEGGESLUTSCHT
