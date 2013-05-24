@@ -1,0 +1,18 @@
+.TH madasul 1 madasul\-VERSION
+.SH NAME
+madasul init script for madasuld
+.SH SYNOPSIS
+.B madasul
+.RB [-p\ port]
+.RB file
+.SH DESCRIPTION
+Starts madasul and sends a file line-by-line as commands to it.
+.SH OPTIONS
+.TP
+.B \-p
+use port (default: 6666, since 666 is used by doom)
+.TP
+.B file
+A file containing a list of madasul commands. See madasuld for commands
+.SH SEE ALSO
+.BR madasuld,madasulc
