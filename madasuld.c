@@ -623,6 +623,7 @@ void* listener() {
 				case STATUS:
 			        sprintr(&buf, strlen(val) ? val : DEFAULT_STATUS,
                               "#c", cur_track, "##", num_tracks, "$p", library[cur_track]->path,
+		                      "#s", state, "#r", rnd,
 		                      "$g", library[cur_track]->genre,
 		                      "$a", library[cur_track]->artist,
 		                      "$l", library[cur_track]->album,
