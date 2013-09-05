@@ -1,0 +1,45 @@
+.TH angl 1 angl\-VERSION
+.SH NAME
+angl \- talks to madasul
+.SH SYNOPSIS
+.B madasul
+.RB [-p\ port]
+.RB [-h\ host]
+.SH DESCRIPTION
+Simple front end for madasul. Angl does not provide playlists, but sets of regexp filters on metadata.
+.SH OPTIONS
+.TP
+.B \-p
+Use port (default: 6666, since 666 is used by doom)
+.TP
+.B \-h
+Connect to host (default: localhost)
+.SH USAGE
+.SS commands
+.TP
+.B [num] b,p,f
+prev (Before), Playpause, next (Forward)
+.TP
+.B r
+toggle Random
+.TP
+.B q,s
+Quit, Stop
+.TP
+.B a,d
+Add or Delete a filter in current filterlist
+.B A,D,l
+Add, Delete or seLect a filterlist
+.TP
+.B w,o
+Write or Open a filterlist
+.BR overwrites\ without\ question!
+.TP
+.B u
+Use current filerlist
+.SH CUSTOMIZATION
+config.h
+.SH SEE ALSO
+.BR madasul
+.SH BUGS
+DAS GANZE GEHIRN WEGGESLUTSCHT
