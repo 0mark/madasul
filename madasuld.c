@@ -11,9 +11,8 @@
  */
 
 /* includes */
-#define _POSIX_C_SOURCE 1
+#define _DEFAULT_SOURCE
 #include <stdio.h>
-#define __USE_BSD
 #include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
@@ -35,7 +34,7 @@
 #define TRACKS_BUF_SIZE	   128
 #define DEFAULT_STATUS     "Track (#c of ##): $p\nGenre: $g\nArtist: $a\nAlbum: $l\nTrack: [#n] $t\n"
 #define DEFAULT_SHOWLIB    "#i:\t$p\n""\t[$g] ($a - $l - #n) $t\n"
-#define debug
+//#define debug
 
 /* macros */
 #define LENGTH(X)                  (sizeof X / sizeof X[0])
@@ -158,7 +157,7 @@ void sprintr(char **result, const char *cmd, ...) {
 	va_list ap;
     char *p, *pp;
     char *tmp, *buf;
-    int pos, len, n, val;
+    int pos, len, clen, n, val;
 
 	va_start(ap, cmd);
 
@@ -166,7 +165,7 @@ void sprintr(char **result, const char *cmd, ...) {
     printf("sprintr: %s\n", cmd);
 #endif
 
-    XALLOC(buf, char, strlen(cmd));
+    XALLOC(buf, char, strlen(cmd) + 1);
     strcpy(buf, cmd);
 
     while(1) {
@@ -179,10 +178,11 @@ void sprintr(char **result, const char *cmd, ...) {
                     while((pos = (intptr_t)strstr(buf, p))!=0) {
                         pos -= (intptr_t)buf;
                         len = strlen(pp);
-                        XALLOC(tmp, char, strlen(buf) + len - 1);
+                        clen = strlen(buf);
+                        XALLOC(tmp, char, clen + len);
                         strncpy(tmp, buf, pos);
-                        strcpy(tmp + pos, pp);
-                        strcpy(tmp + pos + len, buf + pos + 2);
+                        strncpy(tmp + pos, pp, len);
+                        strncpy(tmp + pos + len, buf + pos + 2, clen - (pos + 2));
                         free(buf);
                         buf = tmp;
                     }
@@ -197,10 +197,11 @@ void sprintr(char **result, const char *cmd, ...) {
                     }
                     while((pos = (intptr_t)strstr(buf, p))!=0) {
                         pos -= (intptr_t)buf;
-                        XALLOC(tmp, char, strlen(buf) + len - 1);
+                        clen = strlen(buf);
+                        XALLOC(tmp, char, clen + len);
                         strncpy(tmp, buf, pos);
                         snprintf(tmp + pos, len + 1, "%d", val);
-                        strcpy(tmp + pos + len, buf + pos + 2);
+                        strncpy(tmp + pos + len, buf + pos + 2, clen - (pos + 2));
                         free(buf);
                         buf = tmp;
                     }
@@ -211,7 +212,25 @@ void sprintr(char **result, const char *cmd, ...) {
         } else break;
     }
 
-    *result = buf;
+    // replace \t and \n
+    *result = tmp = buf;
+    for(;;) {
+        if(!*tmp) break;
+         if(*tmp=='\\' && tmp[1] && tmp[1]=='t') {
+             *buf = '\t';
+             tmp += 2;
+         } else if(*tmp=='\\' && tmp[1] && tmp[1]=='n') {
+             *buf = '\n';
+             tmp += 2;
+        } else {
+            if(buf!=tmp)
+               *buf = *tmp;
+            tmp++;
+        }
+        buf++;
+    }
+    *buf = '\0';
+
 	va_end(ap);
 }
 
@@ -261,7 +280,7 @@ int register_handler(char* b) {
         len = strlen(s);
         XALLOC(typenames[tc], char, len);
         strncpy(typenames[tc], s, len);
-        printf("%d, %d\n", tc, hc);
+        // printf("%d, %d\n", tc, hc);
         types[tc] = hc;
         b++;
         tc++;
@@ -517,6 +536,7 @@ void call_hook(int h) {
         );
         // Im ok with Hooks spawning two processes, they aint hang in memory for long
         system(cmd);
+        free(cmd);
 	}
 }
 

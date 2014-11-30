@@ -1,7 +1,7 @@
 include config.mk
 
-MD_SRC = madasuld.c
-MD_OBJ = ${MD_SRC:.c=.o}
+SRC = madasuld.c
+OBJ = ${SRC:.c=.o}
 
 all: options madasuld #angl
 
@@ -16,23 +16,22 @@ options:
 	@echo CC $<
 	@${CC} -c ${CFLAGS} $<
 
-${MD_OBJ}: config.mk
-${MC_OBJ}: config.mk
+${OBJ}: config.mk
+${OBJ}: config.mk
 
-madasuld: ${MD_OBJ}
+madasuld: ${OBJ}
 	@echo CC -o $@
-	@${CC} -o $@ ${MD_OBJ} ${LDFLAGS}
+	@${CC} -o $@ ${OBJ} ${LDFLAGS}
 	@echo
 
 clean:
 	@echo cleaning
-	@rm -f madasuld ${MD_OBJ} ${MC_OBJ}
+	@rm -f madasuld ${OBJ} ${OBJ}
 
 install:
 	@echo installing executable file to ${DESTDIR}${PREFIX}/bin
 	@mkdir -p ${DESTDIR}${PREFIX}/bin
 	@cp -f madasuld madasul madasulc madasul-bashstuff.sh ${DESTDIR}${PREFIX}/bin
-	#@sed "s#MADASULSRC#${PREFIX}/share/madasul/src/#g" < madasulm > ${DESTDIR}${PREFIX}/bin/madasulm
 	@chmod 755 ${DESTDIR}${PREFIX}/bin/madasuld
 	@chmod 755 ${DESTDIR}${PREFIX}/bin/madasul
 	@chmod 755 ${DESTDIR}${PREFIX}/bin/madasulc
