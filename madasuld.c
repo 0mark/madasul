@@ -34,7 +34,7 @@
 #define TRACKS_BUF_SIZE	   128
 #define DEFAULT_STATUS     "Track (#c of ##): $p\nGenre: $g\nArtist: $a\nAlbum: $l\nTrack: [#n] $t\n"
 #define DEFAULT_SHOWLIB    "#i:\t$p\n""\t[$g] ($a - $l - #n) $t\n"
-//#define debug
+//#define debug true
 
 /* macros */
 #define LENGTH(X)                  (sizeof X / sizeof X[0])
@@ -330,6 +330,7 @@ int load_lib(char* file) {
     	fgets(buf, BUF_SIZE, f);
 		l++;
 		n = 0;
+		//printf("--%s--\n", buf);
 		b = strtok(buf, "\t");
 		while(b!=NULL && n<8) {
 			bufs[n++] = b;
@@ -363,7 +364,7 @@ int load_lib(char* file) {
 				case 6:	library[i]->genre=c; break;
 			}
 		}
-		if(n==7)
+		if(n==8)
 			library[i]->number = atoi(bufs[7]);
 
         i++;
