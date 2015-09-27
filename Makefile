@@ -31,11 +31,15 @@ clean:
 install:
 	@echo installing executable file to ${DESTDIR}${PREFIX}/bin
 	@mkdir -p ${DESTDIR}${PREFIX}/bin
-	@cp -f madasuld madasul madasulc madasul-bashstuff.sh ${DESTDIR}${PREFIX}/bin
+	@cp -f madasuld ${DESTDIR}${PREFIX}/bin
+	@sed "s#PREFIX#${PREFIX}#g" < madasul > ${DESTDIR}${PREFIX}/bin/madasul
+	@sed "s#PREFIX#${PREFIX}#g" < madasulc > ${DESTDIR}${PREFIX}/bin/madasulc
 	@chmod 755 ${DESTDIR}${PREFIX}/bin/madasuld
 	@chmod 755 ${DESTDIR}${PREFIX}/bin/madasul
 	@chmod 755 ${DESTDIR}${PREFIX}/bin/madasulc
-	@chmod 755 ${DESTDIR}${PREFIX}/bin/madasul-bashstuff.sh
+	@mkdir -p ${DESTDIR}${PREFIX}/lib
+	@cp -f madasul-bashstuff ${DESTDIR}${PREFIX}/lib
+	#@chmod 755 ${DESTDIR}${PREFIX}/bin/madasul-bashstuff
 	@echo installing manual page to ${DESTDIR}${MANPREFIX}/man1
 	@mkdir -p ${DESTDIR}${PREFIX}/man/man1
 	@sed "s/VERSION/${VERSION}/g" < madasuld.1 > ${DESTDIR}${MANPREFIX}/man1/madasuld.1
@@ -43,7 +47,7 @@ install:
 	@sed "s/VERSION/${VERSION}/g" < madasulc.1 > ${DESTDIR}${MANPREFIX}/man1/madasulc.1
 	@echo installing examples to ${DESTDIR}${PREFIX}/share/madasul/examples
 	@mkdir -p ${DESTDIR}${PREFIX}/share/madasul/examples
-	@cp -Rf examples/* ${DESTDIR}${PREFIX}/share/madasul/examples
+	@for i in $$(ls events); do sed "s#PREFIX#${PREFIX}#g" < examples/$$i > ${DESTDIR}${PREFIX}/share/madasul/examples/$$i; done
 
 uninstall:
 	rm ${DESTDIR}${PREFIX}/bin/madasuld

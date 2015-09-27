@@ -4,7 +4,7 @@ extravar() {
     echo "Unknwon Parameter $1"
 }
 
-. madasul-bashstuff.sh
+. PREFIX/lib/madasul-bashstuff.sh
 
 if [ -z "$cmd" ]; then
 	echo "Usage: madasul [-p port] command file"
