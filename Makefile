@@ -47,7 +47,7 @@ install:
 	@sed "s/VERSION/${VERSION}/g" < madasulc.1 > ${DESTDIR}${MANPREFIX}/man1/madasulc.1
 	@echo installing examples to ${DESTDIR}${PREFIX}/share/madasul/examples
 	@mkdir -p ${DESTDIR}${PREFIX}/share/madasul/examples
-	@for i in $$(ls events); do sed "s#PREFIX#${PREFIX}#g" < examples/$$i > ${DESTDIR}${PREFIX}/share/madasul/examples/$$i; done
+	@for i in $$(ls examples); do sed "s#PREFIX#${PREFIX}#g" < examples/$$i > ${DESTDIR}${PREFIX}/share/madasul/examples/$$i; done
 
 uninstall:
 	rm ${DESTDIR}${PREFIX}/bin/madasuld
